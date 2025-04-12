@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>غرفة صراحة - صراحة البدوية</title>
+  <!-- خطوط جوجل -->
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
+  <!-- أيقونات -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <!-- Animate.css -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Reem+Kufi&display=swap');
+    .arabic-font {
+      font-family: 'Tajawal', 'Reem Kufi', sans-serif;
+    }
+    .desert-bg {
+      background-image: url(bd.webp);
+      background-size: cover;
+      background-position: center;
+    }
+    .chat-messages {
+      scrollbar-width: thin;
+      scrollbar-color: #d97706 transparent;
+    }
+    .chat-messages::-webkit-scrollbar {
+      width: 6px;
+    }
+    .chat-messages::-webkit-scrollbar-thumb {
+      background-color: #d97706;
+      border-radius: 3px;
+    }
+  </style>
+</head>
+<body class="arabic-font min-h-screen desert-bg bg-fixed">
+  <!-- شريط التنقل -->
+  <nav class="bg-amber-900 bg-opacity-80 text-white shadow-lg">
+    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
+      <div class="flex items-center space-x-2">
+        <span class="text-xl font-bold">جماعتي </span>
+      </div>
+      <div class="flex items-center space-x-4">
+        <div id="room-info" class="flex items-center bg-amber-800 px-3 py-1 rounded-full">
+          <i class="fas fa-door-open mr-2"></i>
+          <span id="room-code" class="font-mono">123ABC</span>
+          <button id="copy-room-id" class="ml-2 text-amber-200 hover:text-white">
+            <i class="fas fa-copy"></i>
+          </button>
+        </div>
+        <button id="leave-room-btn" class="bg-amber-700 hover:bg-amber-600 px-4 py-2 rounded-full flex items-center">
+          <i class="fas fa-sign-out-alt mr-2"></i>
+          <span>خروج</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- المحتوى الرئيسي -->
+  <main class="container mx-auto px-4 py-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <!-- لوحة اللاعبين -->
+      <div class="lg:col-span-1">
+        <div class="bg-amber-50 bg-opacity-90 rounded-xl shadow-lg overflow-hidden h-full">
+          <div class="bg-gradient-to-r from-amber-700 to-amber-600 p-4 text-white">
+            <h2 class="text-xl font-bold flex items-center">
+              <i class="fas fa-users mr-2"></i>
+              <span>اللاعبين (<span id="players-count">0</span>)</span>
+            </h2>
+          </div>
+          <div id="players-list" class="p-4 space-y-3 max-h-96 overflow-y-auto">
+            <!-- سيتم ملؤها باللاعبين -->
+          </div>
+        </div>
+      </div>
+      
+      <!-- لوحة اللعبة الرئيسية -->
+      <div class="lg:col-span-2 space-y-6">
+        <!-- صندوق السؤال -->
+        <div class="bg-amber-50 bg-opacity-90 rounded-xl shadow-lg overflow-hidden animate__animated animate__fadeIn">
+          <div class="bg-gradient-to-r from-amber-800 to-amber-700 p-4 text-white">
+            <h2 class="text-xl font-bold flex items-center">
+              <i class="fas fa-question-circle mr-2"></i>
+              <span>سؤال الصراحة</span>
+            </h2>
+          </div>
+          <div class="p-6">
+            <div id="question-box" class="text-center">
+              <p id="question-text" class="text-2xl font-bold text-amber-800 mb-6 min-h-24 flex items-center justify-center">
+                انتظر بدء الجولة...
+              </p>
+              
+              <div id="timer-container" class="mb-6 hidden">
+                <div class="inline-flex items-center justify-center bg-amber-100 rounded-full w-24 h-24 border-4 border-amber-500">
+                  <span id="timer" class="text-3xl font-bold text-amber-800">30</span>
+                </div>
+              </div>
+              
+              <div id="current-player-box" class="mb-6">
+                <h3>جاوب</h3>
+                <div class="inline-block bg-amber-100 px-4 py-2 rounded-full">
+                  <span class="font-bold text-amber-800">اللاعب:</span>
+                  <span id="current-player" class="font-bold">---</span>
+                </div>
+              </div>
+              
+              <div class="flex justify-center space-x-4">
+                <button id="start-round-btn" class="bg-amber-600 hover:bg-amber-700 text-white px-6 py-3 rounded-full font-bold shadow-lg transform hover:scale-105 transition-all">
+                  <i class="fas fa-play mr-2"></i> بدء الجولة
+                </button>
+                <button id="skip-question-btn" class="bg-amber-200 hover:bg-amber-300 text-amber-800 px-6 py-3 rounded-full font-bold shadow-lg transform hover:scale-105 transition-all hidden">
+                  <i class="fas fa-forward mr-2"></i> تخطي
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- صندوق الدردشة -->
+        <div class="bg-amber-50 bg-opacity-90 rounded-xl shadow-lg overflow-hidden">
+          <div class="bg-gradient-to-r from-amber-700 to-amber-600 p-4 text-white">
+            <h2 class="text-xl font-bold flex items-center">
+              <i class="fas fa-comments mr-2"></i>
+              <span>الدردشة</span>
+            </h2>
+          </div>
+          <div class="p-4">
+            <div id="chat-messages" class="chat-messages h-64 overflow-y-auto p-3 space-y-3 mb-4">
+              <!-- سيتم ملؤها بالرسائل -->
+            </div>
+            <div class="flex space-x-2">
+              <input id="chat-input" type="text" placeholder="اكتب رسالة..." class="flex-1 py-3 px-4 rounded-full border-2 border-amber-300 focus:border-amber-500 focus:outline-none">
+              <button id="send-message-btn" class="bg-amber-600 hover:bg-amber-700 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg">
+                <i class="fas fa-paper-plane"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="room.js" type="module"></script>
+</body>
+</html>
