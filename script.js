@@ -49,35 +49,24 @@ function signOut() {
     });
 }
 
-// تحديث واجهة المستخدم حسب حالة المصادقة
+// تحديث واجهة المستخدم
 function updateUI() {
   const user = auth.currentUser;
-  
   if (user) {
     userAvatar.src = user.photoURL || 'https://i.imgur.com/8Km9tLL.png';
     userName.textContent = user.displayName || 'مستخدم';
-    
+
     userSection.classList.remove('hidden');
     guestSection.classList.add('hidden');
-    
+
     authBtn.innerHTML = '<i class="fas fa-sign-out-alt mr-2"></i> تسجيل الخروج';
     authBtn.onclick = signOut;
-    
-    if (authBtnLarge) {
-      authBtnLarge.innerHTML = '<i class="fas fa-sign-out-alt mr-2"></i> تسجيل الخروج';
-      authBtnLarge.onclick = signOut;
-    }
   } else {
     userSection.classList.add('hidden');
     guestSection.classList.remove('hidden');
-    
-    authBtn.innerHTML = '<i class="fab fa-google mr-2"></i> تسجيل الدخول';
+
+    authBtn.innerHTML = '<i class="fab fa-google mr-2"></i> تسجيل الدخول باستخدام جوجل';
     authBtn.onclick = signInWithGoogle;
-    
-    if (authBtnLarge) {
-      authBtnLarge.innerHTML = '<i class="fab fa-google mr-2"></i> تسجيل الدخول باستخدام جوجل';
-      authBtnLarge.onclick = signInWithGoogle;
-    }
   }
 }
 
