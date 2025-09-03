@@ -296,6 +296,155 @@ roomRef.onSnapshot((docSnap) => {
   }
 });
 
+
+// ====================== الدردشة الصوتية (WebRTC + Firestore) ======================
+
+const toggleAudioBtn = document.getElementById('toggle-audio-btn');
+const audioContainer = document.getElementById('audio-container');
+
+let localStream = null;
+let peerConnections = {};
+
+// تشغيل / إيقاف المايك
+toggleAudioBtn.addEventListener('click', async () => {
+  if (!localStream) {
+    try {
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      addAudioStream(currentUser.uid, localStream, true);
+      toggleAudioBtn.textContent = "🔇 إيقاف الميكروفون";
+
+      // مشاركة الصوت مع الآخرين
+      createOffer();
+    } catch (err) {
+      console.error("Mic error:", err);
+      alert("فشل تشغيل الميكروفون: " + err.message);
+    }
+  } else {
+    stopAudio();
+  }
+});
+
+function stopAudio() {
+  localStream.getTracks().forEach(track => track.stop());
+  localStream = null;
+  const audioEl = document.getElementById(`audio-${currentUser.uid}`);
+  if (audioEl) audioEl.remove();
+  toggleAudioBtn.textContent = "🎤 تشغيل الميكروفون";
+}
+
+// إضافة عنصر صوت
+function addAudioStream(userId, stream, isLocal = false) {
+  let audioEl = document.getElementById(`audio-${userId}`);
+  if (!audioEl) {
+    audioEl = document.createElement("audio");
+    audioEl.id = `audio-${userId}`;
+    audioEl.autoplay = true;
+    audioEl.controls = false;
+    audioEl.className = "w-full";
+    if (isLocal) audioEl.muted = true;
+    audioContainer.appendChild(audioEl);
+  }
+  audioEl.srcObject = stream;
+}
+
+// إنشاء اتصال
+function createPeerConnection(peerId) {
+  const pc = new RTCPeerConnection();
+  peerConnections[peerId] = pc;
+
+  // إضافة الصوت
+  if (localStream) {
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  }
+
+  // استقبال الصوت
+  pc.ontrack = (event) => {
+    addAudioStream(peerId, event.streams[0]);
+  };
+
+  // مشاركة ICE
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      roomRef.collection("candidates").add({
+        from: currentUser.uid,
+        to: peerId,
+        candidate: event.candidate.toJSON()
+      });
+    }
+  };
+
+  return pc;
+}
+
+// إنشاء Offer
+async function createOffer() {
+  const roomSnap = await roomRef.get();
+  const data = roomSnap.data();
+
+  for (let player of data.players) {
+    if (player.id === currentUser.uid) continue;
+    const pc = createPeerConnection(player.id);
+    const offer = await pc.createOffer();
+    await pc.setLocalDescription(offer);
+
+    await roomRef.collection("offers").doc(`${currentUser.uid}_${player.id}`).set({
+      from: currentUser.uid,
+      to: player.id,
+      sdp: offer
+    });
+  }
+}
+
+// الاستماع للـ Offers
+roomRef.collection("offers").where("to", "==", auth.currentUser?.uid || "").onSnapshot(async (snapshot) => {
+  for (const change of snapshot.docChanges()) {
+    if (change.type === "added") {
+      const offer = change.doc.data();
+      const pc = createPeerConnection(offer.from);
+      await pc.setRemoteDescription(new RTCSessionDescription(offer.sdp));
+
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+
+      await roomRef.collection("answers").doc(`${auth.currentUser.uid}_${offer.from}`).set({
+        from: auth.currentUser.uid,
+        to: offer.from,
+        sdp: answer
+      });
+    }
+  }
+});
+
+// الاستماع للـ Answers
+roomRef.collection("answers").where("to", "==", auth.currentUser?.uid || "").onSnapshot(async (snapshot) => {
+  for (const change of snapshot.docChanges()) {
+    if (change.type === "added") {
+      const answer = change.doc.data();
+      const pc = peerConnections[answer.from];
+      if (pc) {
+        await pc.setRemoteDescription(new RTCSessionDescription(answer.sdp));
+      }
+    }
+  }
+});
+
+// الاستماع للـ ICE Candidates
+roomRef.collection("candidates").where("to", "==", auth.currentUser?.uid || "").onSnapshot((snapshot) => {
+  snapshot.docChanges().forEach(async (change) => {
+    if (change.type === "added") {
+      const data = change.doc.data();
+      const pc = peerConnections[data.from];
+      if (pc) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+        } catch (e) {
+          console.error("Error adding ICE candidate:", e);
+        }
+      }
+    }
+  });
+});
+
 // تعيين معالج الأحداث
 copyRoomIdBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(roomId);

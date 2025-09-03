@@ -345,3 +345,116 @@ if (roomCodeInput) {
 auth.onAuthStateChanged((user) => {
   updateUI();
 });
+
+
+// ... الكود الحالي ...
+
+// نظام الاشتراكات والدفع
+async function setupPaymentSystem() {
+  const paymentModal = document.getElementById('payment-modal');
+  const statusModal = document.getElementById('payment-status-modal');
+  let currentPlan = null;
+
+  // فتح نافذة الدفع
+  function openPaymentModal(planId) {
+    currentPlan = planId;
+    document.getElementById('transaction-id').value = '';
+    document.getElementById('sender-number').value = '';
+    paymentModal.classList.remove('hidden');
+  }
+
+  // إغلاق نافذة الدفع
+  function closePaymentModal() {
+    paymentModal.classList.add('hidden');
+  }
+
+  // عرض حالة الدفع
+  function showPaymentStatus(icon, title, message, showButton = false) {
+    document.getElementById('payment-status-icon').className = `text-5xl mb-4 ${icon}`;
+    document.getElementById('payment-status-title').textContent = title;
+    document.getElementById('payment-status-message').textContent = message;
+    document.getElementById('close-status-modal').classList.toggle('hidden', !showButton);
+    statusModal.classList.remove('hidden');
+  }
+
+  // معالجة الدفع
+  async function processPayment() {
+    const transactionId = document.getElementById('transaction-id').value.trim();
+    const senderNumber = document.getElementById('sender-number').value.trim();
+    
+    if (!transactionId || !senderNumber) {
+      alert('الرجاء إدخال جميع البيانات المطلوبة');
+      return;
+    }
+    
+    if (!/^\d+$/.test(senderNumber) || senderNumber.length < 10) {
+      alert('الرجاء إدخال رقم هاتف صحيح');
+      return;
+    }
+    
+    closePaymentModal();
+    showPaymentStatus('fas fa-spinner fa-spin text-amber-600', 'جاري معالجة طلبك', 'الرجاء الانتظار بينما نقوم بتأكيد الدفع');
+    
+    const plans = {
+      'basic': { amount: 50, name: 'الباقة الأساسية' },
+      'pro': { amount: 100, name: 'الباقة الاحترافية' },
+      'premium': { amount: 200, name: 'الباقة المميزة' }
+    };
+    
+    const plan = plans[currentPlan];
+    
+    try {
+      const result = await paymentSystem.addTransaction(auth.currentUser.uid, {
+        transactionId: transactionId,
+        senderNumber: senderNumber,
+        amount: plan.amount,
+        planId: currentPlan,
+        planName: plan.name,
+        userName: auth.currentUser.displayName || 'مستخدم'
+      });
+      
+      if (result.success) {
+        // مراقبة حالة المعاملة
+        const unsubscribe = paymentSystem.watchTransaction(result.transactionId, (transaction) => {
+          if (transaction?.status === 'verified') {
+            showPaymentStatus('fas fa-check-circle text-green-500', 'تم الدفع بنجاح', 'تم تفعيل الاشتراك المميز الخاص بك', true);
+            unsubscribe();
+          } else if (transaction?.status === 'rejected') {
+            showPaymentStatus('fas fa-times-circle text-red-500', 'تم رفض الدفع', 'الرجاء التحقق من بيانات الدفع والمحاولة مرة أخرى', true);
+            unsubscribe();
+          }
+        });
+        
+        showPaymentStatus(
+          'fas fa-check-circle text-green-500', 
+          'تم إرسال طلبك', 
+          'سيتم مراجعة طلبك وتفعيل الاشتراك خلال 24 ساعة. يمكنك متابعة الحالة من بروفايلك.',
+          true
+        );
+      } else {
+        showPaymentStatus('fas fa-times-circle text-red-500', 'حدث خطأ', result.error, true);
+      }
+    } catch (error) {
+      showPaymentStatus('fas fa-times-circle text-red-500', 'حدث خطأ', error.message, true);
+    }
+  }
+
+  // تعيين معالج الأحداث
+  document.getElementById('basic-plan-btn')?.addEventListener('click', () => openPaymentModal('basic'));
+  document.getElementById('pro-plan-btn')?.addEventListener('click', () => openPaymentModal('pro'));
+  document.getElementById('premium-plan-btn')?.addEventListener('click', () => openPaymentModal('premium'));
+  document.getElementById('close-payment-modal')?.addEventListener('click', closePaymentModal);
+  document.getElementById('cancel-payment')?.addEventListener('click', closePaymentModal);
+  document.getElementById('confirm-payment')?.addEventListener('click', processPayment);
+  document.getElementById('close-status-modal')?.addEventListener('click', () => {
+    statusModal.classList.add('hidden');
+  });
+}
+
+// في DOMContentLoaded أو عند تغيير حالة المصادقة
+auth.onAuthStateChanged((user) => {
+  updateUI();
+  if (user) {
+    setupPaymentSystem();
+  }
+});

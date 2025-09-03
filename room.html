@@ -33,6 +33,17 @@
       background-color: #d97706;
       border-radius: 3px;
     }
+
+    .typing-dots div {
+  animation-duration: 1.4s;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+
+@keyframes bounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-5px); }
+}
   </style>
 </head>
 <body class="arabic-font min-h-screen desert-bg bg-fixed">
@@ -128,6 +139,7 @@
           </div>
           <div class="p-4">
             <div id="chat-messages" class="chat-messages h-64 overflow-y-auto p-3 space-y-3 mb-4">
+              <div id="typing-indicator" class="hidden px-3 pb-2"></div>
               <!-- سيتم ملؤها بالرسائل -->
             </div>
             <div class="flex space-x-2">
@@ -136,6 +148,18 @@
                 <i class="fas fa-paper-plane"></i>
               </button>
             </div>
+            <!-- أزرار الصوت -->
+<div class="mt-4 flex space-x-2">
+  <button id="toggle-audio-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-full shadow">
+    🎤 تشغيل الميكروفون
+  </button>
+</div>
+
+<!-- مساحة عرض الصوت -->
+<div id="audio-container" class="mt-4 space-y-2">
+  <!-- سيتم إضافة الأصوات هنا -->
+</div>
+
           </div>
         </div>
       </div>

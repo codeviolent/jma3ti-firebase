@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>صراحة البدوية - لعبة الأسئلة الجريئة</title>
+  <title>jma3ti</title>
   <!-- خطوط جوجل -->
   <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
   <!-- أيقونات -->
@@ -31,6 +31,169 @@
     .move_2 {
     animation: moveText 2s infinite;
     }
+
+
+    .promo-banner {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    width: 300px;
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-radius: 12px;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+    border: 1px solid #e0e0e0;
+    z-index: 1000;
+    overflow: hidden;
+    animation: floatBanner 3s ease-in-out infinite alternate;
+}
+
+@keyframes floatBanner {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(-5px); }
+}
+
+.promo-container {
+    position: relative;
+}
+
+.promo-messages {
+    background: #2c3e50;
+    color: white;
+    padding: 10px 15px;
+    text-align: center;
+    font-size: 14px;
+}
+
+.message {
+    display: none;
+    animation: fadeIn 0.5s ease-in-out;
+}
+
+.message.active {
+    display: block;
+}
+
+.highlight {
+    color: #f1c40f;
+    font-weight: bold;
+}
+
+.promo-slider {
+    position: relative;
+    height: 180px;
+    overflow: hidden;
+}
+
+.promo-slide {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    padding: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.5s ease-in-out;
+}
+
+.promo-slide.active {
+    opacity: 1;
+}
+
+.company-logo {
+    max-width: 150px;
+    max-height: 50px;
+    margin-bottom: 10px;
+}
+
+.promo-content {
+    text-align: center;
+}
+
+.promo-content h3 {
+    color: #2c3e50;
+    font-size: 16px;
+    margin-bottom: 8px;
+}
+
+.promo-content p {
+    color: #7f8c8d;
+    font-size: 14px;
+    margin-bottom: 12px;
+}
+
+.promo-btn {
+    display: inline-block;
+    background: #3498db;
+    color: white;
+    padding: 6px 15px;
+    border-radius: 20px;
+    text-decoration: none;
+    font-size: 13px;
+    transition: all 0.3s ease;
+}
+
+.promo-btn:hover {
+    background: #2980b9;
+    transform: translateY(-2px);
+}
+
+.promo-code {
+    background: #f1c40f;
+    color: #2c3e50;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-weight: bold;
+}
+
+.promo-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 15px;
+    background: #f8f9fa;
+    border-top: 1px solid #e0e0e0;
+}
+
+.prev-btn, .next-btn {
+    background: transparent;
+    border: none;
+    color: #7f8c8d;
+    font-size: 20px;
+    cursor: pointer;
+    transition: color 0.3s ease;
+}
+
+.prev-btn:hover, .next-btn:hover {
+    color: #3498db;
+}
+
+.slide-dots {
+    display: flex;
+    gap: 5px;
+}
+
+.slide-dots .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #bdc3c7;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.slide-dots .dot.active {
+    background: #3498db;
+    transform: scale(1.2);
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
   </style>
 </head>
 <body class="arabic-font min-h-screen desert-bg bg-fixed">
@@ -88,6 +251,7 @@
         </div>
       </div>
       
+      
       <!-- ميزات اللعبة -->
       <div class="bg-amber-100 bg-opacity-50 p-6 border-t border-amber-200">
         <h2 class="text-2xl font-bold text-amber-800 mb-4 text-center">مميزات اللعبة</h2>
@@ -112,6 +276,184 @@
     </div>
   </main>
 
+
+
+
+
+
+<!-- أضف هذا الجزء قبل تذييل الصفحة -->
+<div id="premium-section" class="bg-white p-6 rounded-xl shadow-lg mt-8">
+  <h2 class="text-2xl font-bold text-amber-800 mb-4 text-center">الاشتراك المميز</h2>
+  <p class="text-gray-600 text-center mb-6">قم بالترقية الآن للاستمتاع بمميزات حصرية</p>
+  
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <!-- الباقة الأساسية -->
+    <div class="border border-amber-300 rounded-lg p-6 hover:shadow-lg transition-shadow transform hover:-translate-y-1">
+      <div class="text-center mb-4">
+        <h3 class="font-bold text-amber-700 text-xl mb-2">الباقة الأساسية</h3>
+        <div class="text-3xl font-bold text-amber-600 mb-2">50 د.ج <span class="text-sm font-normal">/شهر</span></div>
+        <div class="text-sm text-gray-500">فاتورة شهرية متكررة</div>
+      </div>
+      
+      <ul class="space-y-2 mb-6">
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>أسئلة مميزة إضافية</span>
+        </li>
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>إمكانية إنشاء غرف خاصة</span>
+        </li>
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>أيقونة مميزة في الدردشة</span>
+        </li>
+      </ul>
+      
+      <button id="basic-plan-btn" class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-lg font-bold">
+        اشترك الآن
+      </button>
+    </div>
+    
+    <!-- الباقة الاحترافية -->
+    <div class="border-2 border-amber-500 rounded-lg p-6 bg-amber-50 hover:shadow-lg transition-shadow transform hover:-translate-y-1">
+      <div class="text-center mb-4">
+        <div class="bg-amber-500 text-white text-xs font-bold px-2 py-1 rounded-full inline-block mb-2">الأكثر شهرة</div>
+        <h3 class="font-bold text-amber-700 text-xl mb-2">الباقة الاحترافية</h3>
+        <div class="text-3xl font-bold text-amber-600 mb-2">100 د.ج <span class="text-sm font-normal">/شهر</span></div>
+        <div class="text-sm text-gray-500">فاتورة شهرية متكررة</div>
+      </div>
+      
+      <ul class="space-y-2 mb-6">
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>جميع مميزات الباقة الأساسية</span>
+        </li>
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>إمكانية تخصيص الغرفة</span>
+        </li>
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>إضافة أسئلة مخصصة</span>
+        </li>
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>إحصائيات متقدمة</span>
+        </li>
+      </ul>
+      
+      <button id="pro-plan-btn" class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-lg font-bold">
+        اشترك الآن
+      </button>
+    </div>
+    
+    <!-- الباقة المميزة -->
+    <div class="border border-amber-300 rounded-lg p-6 hover:shadow-lg transition-shadow transform hover:-translate-y-1">
+      <div class="text-center mb-4">
+        <h3 class="font-bold text-amber-700 text-xl mb-2">الباقة المميزة</h3>
+        <div class="text-3xl font-bold text-amber-600 mb-2">200 د.ج <span class="text-sm font-normal">/شهر</span></div>
+        <div class="text-sm text-gray-500">فاتورة شهرية متكررة</div>
+      </div>
+      
+      <ul class="space-y-2 mb-6">
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>جميع مميزات الباقة الاحترافية</span>
+        </li>
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>دعم فني مميز</span>
+        </li>
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>إمكانية إدارة الغرف</span>
+        </li>
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>إشعارات مخصصة</span>
+        </li>
+        <li class="flex items-center">
+          <i class="fas fa-check text-green-500 mr-2"></i>
+          <span>أولوية في الدعم</span>
+        </li>
+      </ul>
+      
+      <button id="premium-plan-btn" class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded-lg font-bold">
+        اشترك الآن
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة الدفع -->
+<div id="payment-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+    <div class="flex justify-between items-center mb-4">
+      <h3 class="text-xl font-bold text-amber-800">إتمام عملية الدفع</h3>
+      <button id="close-payment-modal" class="text-gray-500 hover:text-gray-700">
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+    
+    <div class="space-y-4">
+      <div>
+        <p class="text-gray-600 mb-2">طريقة الدفع:</p>
+        <div class="border border-gray-300 rounded-lg p-3 bg-gray-50">
+          <div class="flex items-center">
+            <img src="cmh.png" alt="Mobile Payment" class="w-10 h-10 mr-3">
+            <div>
+              <p class="font-bold">الدفع عبر الهاتف المحمول</p>
+              <p class="text-sm text-gray-500">ارسل المبلغ عبر خدمة تحويل الأموال</p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div>
+        <label class="block text-gray-700 mb-1">رقم المعاملة (من تطبيق الدفع)</label>
+        <input id="transaction-id" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500">
+      </div>
+      
+      <div>
+        <label class="block text-gray-700 mb-1">رقم الهاتف المرسل منه</label>
+        <input id="sender-number" type="text" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-amber-500" placeholder="مثال: 0551234567">
+      </div>
+      
+      <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded">
+        <p class="text-sm text-amber-800">
+          <i class="fas fa-info-circle mr-1"></i> 
+          سيتم تفعيل اشتراكك خلال 24 ساعة بعد التحقق من الدفع
+        </p>
+      </div>
+      
+      <div class="flex justify-end space-x-3 pt-4">
+        <button id="cancel-payment" class="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-100">إلغاء</button>
+        <button id="confirm-payment" class="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-bold">
+          <i class="fas fa-paper-plane mr-2"></i> تأكيد الدفع
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- نافذة حالة الدفع -->
+<div id="payment-status-modal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+  <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+    <div class="text-center">
+      <div id="payment-status-icon" class="text-5xl mb-4">
+        <i class="fas fa-spinner fa-spin text-amber-600"></i>
+      </div>
+      <h3 id="payment-status-title" class="text-xl font-bold mb-2">جاري معالجة طلبك</h3>
+      <p id="payment-status-message" class="text-gray-600 mb-4">الرجاء الانتظار بينما نقوم بتأكيد الدفع</p>
+      <button id="close-status-modal" class="px-6 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 font-bold hidden">
+        حسناً
+      </button>
+    </div>
+  </div>
+</div>
+
+
   <!-- تذييل الصفحة -->
   <footer class="bg-amber-900 bg-opacity-80 text-white py-6 mt-12">
     <div class="container mx-auto px-4 text-center">
@@ -123,9 +465,13 @@
     </div>
   </footer>
 
+  
+
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script src="payment.js" type="module"></script>
   <script src="script.js" type="module"></script>
+  
 </body>
 </html>
