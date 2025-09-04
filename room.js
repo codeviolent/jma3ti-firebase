@@ -12,7 +12,6 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// ===================== عناصر الواجهة =====================
 const urlParams = new URLSearchParams(window.location.search);
 const roomId = urlParams.get('room') || 'default-room';
 const roomRef = db.collection('rooms').doc(roomId);
@@ -30,14 +29,36 @@ const timerContainer = document.getElementById('timer-container');
 
 roomCodeElement.textContent = roomId;
 
-// ===================== متغيرات الحالة =====================
 let currentUser = null;
 let typingTimeout = null;
 let timerInterval = null;
+let currentRoomData = null;
+let chosenEmoji = null;
+let chosenColor = "#d97706";
 
-// ===================== دوال مساعدة =====================
+// ===================== تخصيص اللاعب =====================
+const modal = document.getElementById("customize-modal");
+const emojiBtns = document.querySelectorAll(".emoji-btn");
+const colorPicker = document.getElementById("color-picker");
+const saveCustomizationBtn = document.getElementById("save-customization");
 
-// انضمام للغرفة وتعيين الـ creator إن لم يكن موجودا (الذي سيكون المضيف)
+emojiBtns.forEach(btn => {
+  btn.addEventListener("click", () => {
+    chosenEmoji = btn.textContent;
+    emojiBtns.forEach(b => b.classList.remove("ring-4", "ring-amber-500"));
+    btn.classList.add("ring-4", "ring-amber-500");
+  });
+});
+colorPicker.addEventListener("input", (e) => {
+  chosenColor = e.target.value;
+});
+saveCustomizationBtn.addEventListener("click", async () => {
+  if (!chosenEmoji) chosenEmoji = "🙂";
+  modal.classList.add("hidden");
+  await savePlayerData();
+});
+
+// ===================== انضمام للغرفة =====================
 async function joinRoom() {
   currentUser = auth.currentUser;
   if (!currentUser) {
@@ -54,95 +75,80 @@ async function joinRoom() {
 
   const data = snap.data();
 
-  // إذا ما فيه حقل creator في الدوك، عين هذا المستخدم كمضيف (أول داخل)
+  // لو ما فيه مضيف، عيّن هذا اللاعب
   if (!data.creator) {
-    try {
-      await roomRef.update({ creator: currentUser.uid });
-    } catch (e) {
-      // لو فشل التحديث بسبب قواعد الأمان، لا مشكلة - ربما أُنشئ المبدئ سابقًا
-      console.warn('Failed to set creator (maybe already set):', e);
-    }
+    await roomRef.update({ creator: currentUser.uid });
   }
 
-  // أضف اللاعب إلى مصفوفة اللاعبين إن لم يكن موجوداً
+  // تحقق إذا اللاعب مسجل بالفعل
+  const players = data.players || [];
+  const exists = players.find(p => p.id === currentUser.uid);
+  if (!exists) {
+    modal.classList.remove("hidden"); // أظهر نافذة اختيار الإيموجي واللون
+  }
+}
+
+async function savePlayerData() {
+  const playerData = {
+    id: currentUser.uid,
+    name: currentUser.displayName || 'مستخدم',
+    avatar: currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png',
+    emoji: chosenEmoji,
+    color: chosenColor
+  };
+
   await roomRef.update({
-    players: firebase.firestore.FieldValue.arrayUnion({
-      id: currentUser.uid,
-      name: currentUser.displayName || 'مستخدم',
-      avatar: currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png'
-    })
+    players: firebase.firestore.FieldValue.arrayUnion(playerData)
   });
 }
 
-// بدء الجولة — يحق فقط للمضيف (creator) تشغيلها
-async function startRound() {
-  try {
-    startRoundBtn.disabled = true;
-    startRoundBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i> جاري البدء...';
+// ===================== إرسال رسالة =====================
+async function sendMessage() {
+  const message = chatInput.value.trim();
+  if (!message) return;
 
-    const snap = await roomRef.get();
-    const data = snap.data();
+  const isAnswer = currentRoomData?.currentQuestion &&
+                   currentRoomData?.currentPlayer?.id === currentUser.uid;
 
-    // تحقق المضيف
-    if (data.creator && data.creator !== currentUser.uid) {
-      alert('فقط المضيف يمكنه بدء الجولة.');
-      return;
-    }
+  await roomRef.collection("chat").add({
+    senderId: currentUser.uid,
+    senderName: currentUser.displayName || 'مستخدم',
+    senderAvatar: currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png',
+    senderEmoji: getPlayerEmoji(currentUser.uid),
+    senderColor: getPlayerColor(currentUser.uid),
+    type: isAnswer ? "answer" : "chat",
+    question: isAnswer ? currentRoomData.currentQuestion : null,
+    text: message,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
 
-    const players = data.players || [];
-    const questions = data.questions || [];
-
-    if (players.length < 2) {
-      alert('يجب أن يكون هناك لاعبين على الأقل لبدء الجولة!');
-      return;
-    }
-
-    // اختر سؤال عشوائي
-    const qIndex = Math.floor(Math.random() * (questions.length || 1));
-    const question = questions.length ? questions[qIndex] : 'سؤال افتراضي';
-
-    // اختر لاعب عشوائي - ليس نفس اللاعب الحالي (لو موجود)
-    let available = players;
-    if (data.currentPlayer && data.currentPlayer.id) {
-      available = players.filter(p => p.id !== data.currentPlayer.id);
-      if (available.length === 0) available = players; // لو الكل نفس اللاعب، ارجع القائمة كاملة
-    }
-    const randPlayer = available[Math.floor(Math.random() * available.length)];
-
-    await roomRef.update({
-      currentQuestion: question,
-      currentPlayer: randPlayer,
-      status: 'playing',
-      questionStartTime: firebase.firestore.FieldValue.serverTimestamp()
-    });
-
-    // بدء المؤقت (محليًا أيضاً لعرض عد تنازلي)
-    startTimer(30);
-
-  } catch (e) {
-    console.error('startRound error:', e);
-    alert('حدث خطأ أثناء بدء الجولة.');
-  } finally {
-    startRoundBtn.disabled = false;
-    startRoundBtn.innerHTML = '<i class="fas fa-play mr-2"></i> بدء الجولة';
-  }
+  chatInput.value = "";
+  setTyping(false);
 }
 
-// تخطي السؤال
-async function skipQuestion() {
-  try {
-    await roomRef.update({
-      currentQuestion: null,
-      currentPlayer: null,
-      status: 'waiting'
-    });
-    stopTimer();
-  } catch (e) {
-    console.error('skipQuestion error:', e);
-  }
+// ===================== جلب الإيموجي واللون =====================
+function getPlayerEmoji(uid) {
+  const players = currentRoomData?.players || [];
+  const player = players.find(p => p.id === uid);
+  return player?.emoji || "🙂";
+}
+function getPlayerColor(uid) {
+  const players = currentRoomData?.players || [];
+  const player = players.find(p => p.id === uid);
+  return player?.color || "#333";
 }
 
-// مؤقت الجولة عرض محلي
+// ===================== مؤشر الكتابة =====================
+function setTyping(isTyping) {
+  if (!currentUser) return;
+  roomRef.collection("typing").doc(currentUser.uid).set({
+    name: currentUser.displayName || 'مستخدم',
+    typing: isTyping,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+// ===================== المؤقت =====================
 function startTimer(seconds) {
   clearInterval(timerInterval);
   let remaining = seconds;
@@ -169,234 +175,172 @@ function stopTimer() {
   timerElement.textContent = '30';
 }
 
-// نهاية الجولة
-async function endRound() {
-  try {
-    await roomRef.update({ status: 'waiting' });
-    stopTimer();
-  } catch (e) {
-    console.error('endRound error:', e);
-  }
-}
+// ===================== بدء وتخطي الجولة =====================
+async function startRound() {
+  const snap = await roomRef.get();
+  const data = snap.data();
 
-// مغادرة الغرفة وإزالة اللاعب
-async function leaveRoom() {
-  try {
-    if (currentUser) {
-      await roomRef.update({
-        players: firebase.firestore.FieldValue.arrayRemove({
-          id: currentUser.uid,
-          name: currentUser.displayName || 'مستخدم',
-          avatar: currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png'
-        })
-      });
-      // حذف مؤشر الكتابة لهذا المستخدم (تنظيف)
-      await roomRef.collection('typing').doc(currentUser.uid).delete().catch(()=>{});
-    }
-    window.location.href = 'index.html';
-  } catch (e) {
-    console.error('leaveRoom error:', e);
-    window.location.href = 'index.html';
-  }
-}
-
-// ===================== الدردشة (chat subcollection) =====================
-
-// إرسال رسالة (يحفظ في subcollection chat)
-async function sendMessage() {
-  const message = chatInput.value.trim();
-  if (!message) return;
-
-  try {
-    await roomRef.collection('chat').add({
-      senderId: currentUser.uid,
-      senderName: currentUser.displayName || 'مستخدم',
-      senderAvatar: currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png',
-      text: message,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp()
-    });
-    chatInput.value = '';
-    setTyping(false);
-  } catch (e) {
-    console.error('sendMessage error:', e);
-    alert('فشل إرسال الرسالة.');
-  }
-}
-
-// مؤشر الكتابة
-function setTyping(isTyping) {
-  if (!currentUser) return;
-  roomRef.collection('typing').doc(currentUser.uid).set({
-    name: currentUser.displayName || 'مستخدم',
-    typing: isTyping,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  }).catch(e => console.warn('typing set failed:', e));
-}
-
-// ===================== المستمعون (listeners) =====================
-
-// تحديث حالة الغرفة (لاعبين، سؤال، مضيف...)
-roomRef.onSnapshot((doc) => {
-  if (!doc.exists) {
-    alert('تم إغلاق هذه الغرفة!');
-    window.location.href = 'index.html';
+  if (data.creator && data.creator !== currentUser.uid) {
+    alert('فقط المضيف يمكنه بدء الجولة.');
     return;
   }
 
-  const data = doc.data();
   const players = data.players || [];
+  const questions = data.questions || [];
 
-  // قائمة اللاعبين
-  const playersList = document.getElementById('players-list');
-  playersList.innerHTML = '';
-  players.forEach(p => {
-    const isMe = currentUser && p.id === currentUser.uid;
-    const hostBadge = data.creator === p.id ? `<span class="bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded mr-2">المضيف</span>` : '';
-    const playerHtml = document.createElement('div');
-    playerHtml.className = 'flex items-center space-x-3 bg-white p-3 rounded-lg shadow';
-    playerHtml.innerHTML = `
-      <img src="${p.avatar}" alt="${p.name}" class="w-10 h-10 rounded-full">
-      <div class="flex-1">
-        <div class="flex items-center justify-between">
-          <div class="font-bold ${isMe ? 'text-amber-600' : 'text-gray-800'}">${p.name}</div>
-          <div>${hostBadge}</div>
-        </div>
-      </div>
-    `;
-    playersList.appendChild(playerHtml);
-  });
-
-  document.getElementById('players-count').textContent = players.length;
-
-  // السؤال و اللاعب الحالي
-  const qEl = document.getElementById('question-text');
-  const cpEl = document.getElementById('current-player');
-
-  if (data.currentQuestion) {
-    qEl.textContent = data.currentQuestion;
-    cpEl.textContent = data.currentPlayer?.name || '---';
-    skipQuestionBtn.classList.remove('hidden');
-    startRoundBtn.disabled = true;
-
-    // إذا الحالة waiting -> لا مؤقت
-  } else {
-    qEl.textContent = 'لم يتم اختيار سؤال بعد.';
-    cpEl.textContent = '---';
-    skipQuestionBtn.classList.add('hidden');
-    startRoundBtn.disabled = false;
+  if (players.length < 2) {
+    alert('يجب أن يكون هناك لاعبين على الأقل!');
+    return;
   }
 
-  // لو تم تغيير status إلى waiting نوقف المؤقت
-  if (data.status === 'waiting') stopTimer();
-});
+  const question = questions.length
+    ? questions[Math.floor(Math.random() * questions.length)]
+    : "سؤال افتراضي";
 
-// الاستماع لرسائل الشات (مرتبة بالزمن)
-roomRef.collection('chat').orderBy('timestamp').onSnapshot((snap) => {
-  const chatBox = document.getElementById('chat-messages');
-  chatBox.innerHTML = '';
-
-  snap.forEach(doc => {
-    const msg = doc.data();
-    const isMe = msg.senderId === (currentUser && currentUser.uid);
-    const timeText = msg.timestamp ? new Date(msg.timestamp.seconds * 1000).toLocaleTimeString() : '';
-    const wrapper = document.createElement('div');
-    wrapper.className = `flex ${isMe ? 'justify-start' : 'justify-end'} space-x-2`;
-
-    wrapper.innerHTML = `
-      ${!isMe ? `<img src="${msg.senderAvatar}" class="w-8 h-8 rounded-full">` : ''}
-      <div class="${isMe ? 'bg-amber-100' : 'bg-white'} p-3 rounded-lg shadow max-w-xs">
-        <div class="font-bold text-sm">${msg.senderName}</div>
-        <p class="whitespace-pre-wrap">${escapeHtml(msg.text)}</p>
-        <div class="text-xs text-gray-400 mt-1">${timeText}</div>
-      </div>
-      ${isMe ? `<img src="${msg.senderAvatar}" class="w-8 h-8 rounded-full">` : ''}
-    `;
-    chatBox.appendChild(wrapper);
-  });
-
-  // Scroll to bottom
-  chatBox.scrollTop = chatBox.scrollHeight;
-});
-
-// الاستماع لمؤشر الكتابة
-roomRef.collection('typing').onSnapshot((snap) => {
-  const typingUsers = [];
-  snap.forEach(doc => {
-    const d = doc.data();
-    if (!d) return;
-    // تجاهل نفس المستخدم
-    if (d.typing && currentUser && d.name && d.name !== currentUser.displayName) {
-      typingUsers.push(d.name);
-    }
-  });
-
-  if (typingUsers.length > 0) {
-    typingIndicator.textContent = typingUsers.join(', ') + ' يكتب...';
-    typingIndicator.classList.remove('hidden');
-  } else {
-    typingIndicator.classList.add('hidden');
+  let available = players;
+  if (data.currentPlayer && data.currentPlayer.id) {
+    available = players.filter(p => p.id !== data.currentPlayer.id);
+    if (!available.length) available = players;
   }
-});
+  const randPlayer = available[Math.floor(Math.random() * available.length)];
 
-// ===================== أحداث الواجهة =====================
-sendMessageBtn.addEventListener('click', sendMessage);
-
-// كتابة في الحقل -> مؤشر الكتابة (debounce)
-chatInput.addEventListener('input', () => {
-  setTyping(true);
-  clearTimeout(typingTimeout);
-  typingTimeout = setTimeout(() => setTyping(false), 2000);
-});
-
-// Enter لإرسال
-chatInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    sendMessage();
-  }
-});
-
-// نسخ رمز الغرفة
-copyRoomIdBtn.addEventListener('click', () => {
-  navigator.clipboard.writeText(roomId).then(() => {
-    copyRoomIdBtn.innerHTML = '<i class="fas fa-check"></i>';
-    setTimeout(() => copyRoomIdBtn.innerHTML = '<i class="fas fa-copy"></i>', 1500);
-  });
-});
-
-// بدء الجولة (زر)
-startRoundBtn.addEventListener('click', startRound);
-skipQuestionBtn.addEventListener('click', skipQuestion);
-
-// مغادرة
-leaveRoomBtn.addEventListener('click', leaveRoom);
-
-// ===================== أمان / تنسيقات =====================
-
-// وظيفة بسيطة للهروب من HTML داخل الرسائل لسلامة العرض
-function escapeHtml(text) {
-  if (!text) return '';
-  return text.replace(/[&<>"'`=\/]/g, function (s) {
-    return ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-      '/': '&#x2F;',
-      '`': '&#x60;',
-      '=': '&#x3D;'
-    })[s];
+  await roomRef.update({
+    currentQuestion: question,
+    currentPlayer: randPlayer,
+    status: 'playing',
+    questionStartTime: firebase.firestore.FieldValue.serverTimestamp()
   });
 }
 
-// ===================== المصادقة والبدء =====================
-auth.onAuthStateChanged((user) => {
-  currentUser = user;
-  if (!user) {
-    // إن لم يسجل الدخول تعيد إلى index
-    window.location.href = 'index.html';
-  } else {
-    joinRoom().catch(e => console.error('joinRoom failed:', e));
+async function skipQuestion() {
+  await roomRef.update({
+    currentQuestion: null,
+    currentPlayer: null,
+    status: 'waiting'
+  });
+  stopTimer();
+}
+
+async function endRound() {
+  await roomRef.update({
+    status: 'waiting',
+    currentQuestion: null,
+    currentPlayer: null
+  });
+  stopTimer();
+}
+
+// ===================== الاستماع لحالة الغرفة =====================
+roomRef.onSnapshot((doc) => {
+  if (!doc.exists) return;
+  currentRoomData = doc.data();
+  const data = currentRoomData;
+
+  // قائمة اللاعبين
+  const players = data.players || [];
+  const playersList = document.getElementById('players-list');
+  playersList.innerHTML = "";
+  players.forEach(p => {
+    playersList.innerHTML += `
+      <div class="flex items-center space-x-3 bg-white p-3 rounded-lg shadow">
+        <span style="font-size:20px">${p.emoji || "🙂"}</span>
+        <span class="font-bold" style="color:${p.color || "#333"}">
+          ${p.name} ${data.creator === p.id ? "(المضيف)" : ""}
+        </span>
+      </div>`;
+  });
+  document.getElementById('players-count').textContent = players.length;
+
+  // تحديث السؤال الحالي
+  document.getElementById('question-text').textContent =
+    data.currentQuestion || "لم يتم اختيار سؤال بعد.";
+  document.getElementById('current-player').textContent =
+    data.currentPlayer?.name || "---";
+
+  // المؤقت يظهر للجميع بشكل متزامن
+  if (data.status === 'playing' && data.questionStartTime) {
+    const startTime = data.questionStartTime.toDate().getTime();
+    const now = Date.now();
+    const elapsed = Math.floor((now - startTime) / 1000);
+    const remaining = 30 - elapsed;
+    if (remaining > 0) startTimer(remaining);
+    else stopTimer();
   }
+  if (data.status === 'waiting') {
+    stopTimer();
+  }
+});
+
+// ===================== الاستماع للرسائل =====================
+roomRef.collection("chat").orderBy("timestamp")
+  .onSnapshot((snap) => {
+    const chatBox = document.getElementById('chat-messages');
+    chatBox.innerHTML = "";
+    snap.forEach(doc => {
+      const msg = doc.data();
+      const isMe = msg.senderId === currentUser?.uid;
+
+      let content = "";
+      if (msg.type === "answer") {
+        content = `
+          <div class="font-bold text-sm">${msg.senderEmoji || "🙂"} ${msg.senderName}</div>
+          <div class="text-gray-600">❓ ${msg.question}</div>
+          <div style="color:${msg.senderColor || "#333"}">💬 ${msg.text}</div>
+        `;
+      } else {
+        content = `
+          <div class="font-bold text-sm" style="color:${msg.senderColor || "#333"}">
+            ${msg.senderEmoji || "🙂"} ${msg.senderName}
+          </div>
+          <p>${msg.text}</p>
+        `;
+      }
+
+      chatBox.innerHTML += `
+        <div class="flex ${isMe ? 'justify-start' : 'justify-end'}">
+          <div class="${isMe ? 'bg-amber-100' : 'bg-white'} p-3 rounded-lg shadow max-w-xs">
+            ${content}
+          </div>
+        </div>`;
+    });
+    chatBox.scrollTop = chatBox.scrollHeight;
+  });
+
+// ===================== الاستماع لمؤشر الكتابة =====================
+roomRef.collection("typing").onSnapshot((snap) => {
+  let typingUsers = [];
+  snap.forEach(doc => {
+    const d = doc.data();
+    if (d.typing && d.name && d.name !== currentUser?.displayName) {
+      typingUsers.push(d.name);
+    }
+  });
+  typingIndicator.textContent = typingUsers.length > 0 ? typingUsers.join(", ") + " يكتب..." : "";
+  typingIndicator.classList.toggle("hidden", typingUsers.length === 0);
+});
+
+// ===================== أحداث =====================
+sendMessageBtn.addEventListener('click', sendMessage);
+chatInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') sendMessage();
+  else {
+    setTyping(true);
+    clearTimeout(typingTimeout);
+    typingTimeout = setTimeout(() => setTyping(false), 2000);
+  }
+});
+copyRoomIdBtn.addEventListener('click', () => {
+  navigator.clipboard.writeText(roomId);
+  copyRoomIdBtn.innerHTML = '<i class="fas fa-check"></i>';
+  setTimeout(() => copyRoomIdBtn.innerHTML = '<i class="fas fa-copy"></i>', 2000);
+});
+leaveRoomBtn.addEventListener('click', () => window.location.href = "index.html");
+startRoundBtn.addEventListener('click', startRound);
+skipQuestionBtn.addEventListener('click', skipQuestion);
+
+// ===================== مصادقة =====================
+auth.onAuthStateChanged((u) => {
+  currentUser = u;
+  if (!u) window.location.href = "index.html";
+  else joinRoom();
 });

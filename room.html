@@ -19,6 +19,7 @@
     .chat-messages { scrollbar-width: thin; scrollbar-color: #d97706 transparent; }
     .chat-messages::-webkit-scrollbar { width: 6px; }
     .chat-messages::-webkit-scrollbar-thumb { background-color: #d97706; border-radius: 3px; }
+    .emoji-selected { outline: 3px solid rgba(217,119,6,0.25); transform: scale(1.05); }
   </style>
 </head>
 <body class="desert-bg min-h-screen bg-fixed">
@@ -128,6 +129,29 @@
       </div>
     </div>
   </main>
+
+  <!-- تخصيص اللاعب (modal) -->
+  <div id="customize-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg shadow-lg p-6 w-96">
+      <h2 class="text-lg font-bold mb-4 text-center">اختر إيموجي ولون لك</h2>
+      <div class="flex flex-wrap justify-center gap-3 mb-4">
+        <button type="button" class="emoji-btn text-2xl p-2 rounded">🔥</button>
+        <button type="button" class="emoji-btn text-2xl p-2 rounded">😂</button>
+        <button type="button" class="emoji-btn text-2xl p-2 rounded">😭</button>
+        <button type="button" class="emoji-btn text-2xl p-2 rounded">🌵</button>
+        <button type="button" class="emoji-btn text-2xl p-2 rounded">💎</button>
+        <button type="button" class="emoji-btn text-2xl p-2 rounded">⚡</button>
+        <button type="button" class="emoji-btn text-2xl p-2 rounded">❤️</button>
+      </div>
+      <div class="mb-4">
+        <label class="block text-sm mb-1">اختر لوناً واضحاً يظهر بجانب اسمك</label>
+        <input type="color" id="color-picker" class="w-full h-12 rounded cursor-pointer" value="#d97706"/>
+      </div>
+      <div class="flex gap-2">
+        <button id="save-customization" class="w-full bg-amber-600 hover:bg-amber-700 text-white py-2 rounded">حفظ</button>
+      </div>
+    </div>
+  </div>
 
   <!-- Firebase -->
   <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
