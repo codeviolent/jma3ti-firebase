@@ -8,14 +8,14 @@ const firebaseConfig = {
   appId: "1:394161915136:web:23da8f9f82393f66af5fe5"
 };
 
-// Initialize Firebase
+// Initialize Firebase (compat)
 const app = firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
 // الحصول على معلمات URL
 const urlParams = new URLSearchParams(window.location.search);
-const roomId = urlParams.get('room');
+const roomId = urlParams.get('room') || 'default-room';
 
 // عناصر الواجهة
 const roomCodeElement = document.getElementById('room-code');
@@ -28,13 +28,36 @@ const sendMessageBtn = document.getElementById('send-message-btn');
 const timerElement = document.getElementById('timer');
 const timerContainer = document.getElementById('timer-container');
 
-// تهيئة الغرفة
+const toggleAudioBtn = document.getElementById('toggle-audio-btn');
+const toggleAudioLabel = document.getElementById('toggle-audio-label');
+const audioStatus = document.getElementById('audio-status');
+const audioContainer = document.getElementById('audio-container');
+
 document.getElementById('room-code').textContent = roomId;
+
 const roomRef = db.collection("rooms").doc(roomId);
+
 let timerInterval;
 let currentUser = null;
 
-// الانضمام إلى الغرفة
+// ----- WebRTC / signaling variables -----
+let localStream = null;
+let peerConnections = {}; // keyed by remote user id
+let signalingInitialized = false;
+let lastPlayersIds = []; // for detecting new players
+
+// ICE servers: STUN + a public TURN (اختباري)
+const ICE_SERVERS = [
+  { urls: "stun:stun.l.google.com:19302" },
+  // TURN تجريبي - للاختبار فقط. غير للاستخدام في الإنتاج طويل الأمد.
+  {
+    urls: "turn:openrelay.metered.ca:80",
+    username: "openrelayproject",
+    credential: "openrelayproject"
+  }
+];
+
+// ----------------- وظائف الغرفة الأصلية -----------------
 async function joinRoom() {
   try {
     currentUser = auth.currentUser;
@@ -65,7 +88,6 @@ async function joinRoom() {
   }
 }
 
-// بدء جولة جديدة
 async function startRound() {
   try {
     startRoundBtn.disabled = true;
@@ -74,7 +96,7 @@ async function startRound() {
     const roomSnap = await roomRef.get();
     const roomData = roomSnap.data();
     
-    if (roomData.players.length < 2) {
+    if (!roomData || (roomData.players || []).length < 2) {
       alert("يجب أن يكون هناك لاعبين على الأقل لبدء الجولة!");
       startRoundBtn.disabled = false;
       startRoundBtn.innerHTML = '<i class="fas fa-play mr-2"></i> بدء الجولة';
@@ -82,9 +104,9 @@ async function startRound() {
     }
     
     // اختيار سؤال عشوائي
-    const randomQuestionIndex = Math.floor(Math.random() * roomData.questions.length);
-    const question = roomData.questions[randomQuestionIndex];
-    
+    const randomQuestionIndex = Math.floor(Math.random() * (roomData.questions?.length || 1));
+    const question = roomData.questions ? roomData.questions[randomQuestionIndex] : "سؤال افتراضي";
+
     // اختيار لاعب عشوائي (غير اللاعب الحالي إذا كان هناك لاعب حالي)
     let availablePlayers = roomData.players.filter(player => 
       !roomData.currentPlayer || player.id !== roomData.currentPlayer.id
@@ -111,7 +133,6 @@ async function startRound() {
   }
 }
 
-// مؤقت الجولة
 function startTimer(seconds) {
   clearInterval(timerInterval);
   let remaining = seconds;
@@ -134,7 +155,6 @@ function startTimer(seconds) {
   }, 1000);
 }
 
-// إنهاء الجولة
 async function endRound() {
   try {
     await roomRef.update({
@@ -147,7 +167,6 @@ async function endRound() {
   }
 }
 
-// تخطي السؤال الحالي
 async function skipQuestion() {
   try {
     await roomRef.update({
@@ -162,7 +181,6 @@ async function skipQuestion() {
   }
 }
 
-// إرسال رسالة دردشة
 async function sendMessage() {
   const message = chatInput.value.trim();
   if (!message) return;
@@ -173,19 +191,18 @@ async function sendMessage() {
   }
   
   try {
-    // 1. إنشاء كائن الرسالة أولاً
     const newMessage = {
-      senderId: currentUser.uid,
-      senderName: currentUser.displayName || 'مستخدم',
-      senderAvatar: currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png',
-      text: message,
-      
-    };
+  senderId: currentUser.uid,
+  senderName: currentUser.displayName || 'مستخدم',
+  senderAvatar: currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png',
+  text: message,
+  timestamp: Date.now()
+};
 
-    // 2. إضافة الكامل إلى المصفوفة
-    await roomRef.update({
-      chat: firebase.firestore.FieldValue.arrayUnion(newMessage)
-    });
+await roomRef.update({
+  chat: firebase.firestore.FieldValue.arrayUnion(newMessage)
+});
+
     
     chatInput.value = "";
   } catch (error) {
@@ -194,9 +211,11 @@ async function sendMessage() {
   }
 }
 
-// مغادرة الغرفة
 async function leaveRoom() {
   try {
+    // أولاً: إيقاف الصوت واغلاق الاتصالات
+    await stopAudio(); // هذا ينظف peerConnections و streams و مستندات signaling
+
     if (currentUser) {
       await roomRef.update({
         players: firebase.firestore.FieldValue.arrayRemove({
@@ -213,7 +232,294 @@ async function leaveRoom() {
   }
 }
 
-// تحديثات مباشرة للغرفة
+// ----------------- وظائف WebRTC & Signaling عبر Firestore -----------------
+
+// إنشاء/الحصول على RTCPeerConnection لزميل محدد
+function createPeerConnection(peerId) {
+  if (peerConnections[peerId]) return peerConnections[peerId];
+
+  const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  peerConnections[peerId] = pc;
+
+  // إذا كان لدينا ستريم محلي، أضف المسارات
+  if (localStream) {
+    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+  }
+
+  // استقبال المسار (صوت)
+  pc.ontrack = (event) => {
+    // بعض الأجهزة ترسل عدة stream, نأخذ الأول
+    const stream = event.streams && event.streams[0];
+    if (stream) addAudioStream(peerId, stream, false);
+  };
+
+  // مشاركة ICE candidates عبر Firestore
+  pc.onicecandidate = (event) => {
+    if (event.candidate) {
+      roomRef.collection('webrtc_candidates').add({
+        from: currentUser.uid,
+        to: peerId,
+        candidate: event.candidate.toJSON(),
+        ts: firebase.firestore.FieldValue.serverTimestamp()
+      }).catch(e => console.error("Failed to send ICE candidate:", e));
+    }
+  };
+
+  // حالة الاتصال
+  pc.onconnectionstatechange = () => {
+    const state = pc.connectionState;
+    if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+      // تنظيف العنصر الصوتي للمستخدم هذا
+      removeAudioStream(peerId);
+      // اغلاق الاتصال
+      try { pc.close(); } catch(e){}
+      delete peerConnections[peerId];
+    }
+  };
+
+  return pc;
+}
+
+// إضافة عنصر صوت في الصفحة (للمستخدم المحلي: muted=true)
+function addAudioStream(userId, stream, isLocal = false) {
+  let wrapper = document.getElementById(`audio-wrap-${userId}`);
+  if (!wrapper) {
+    wrapper = document.createElement('div');
+    wrapper.id = `audio-wrap-${userId}`;
+    wrapper.className = 'bg-white p-2 rounded shadow flex items-center justify-between';
+    wrapper.style.direction = 'ltr'; // لعرض أزرار التحكم صحيح
+
+    wrapper.innerHTML = `
+      <div class="flex items-center space-x-3">
+        <img src="${(currentUser && currentUser.uid === userId) ? (currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png') : ''}" id="audio-avatar-${userId}" class="w-10 h-10 rounded-full hidden">
+        <div>
+          <div id="audio-name-${userId}" class="font-bold text-sm">${userId}</div>
+          <div id="audio-sub-${userId}" class="text-xs text-gray-500">صوت مباشر</div>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2">
+        <audio id="audio-${userId}" autoplay playsinline></audio>
+        <button id="mute-btn-${userId}" class="px-2 py-1 rounded text-sm border">كتم</button>
+      </div>
+    `;
+    audioContainer.appendChild(wrapper);
+
+    // mute button
+    const muteBtn = wrapper.querySelector(`#mute-btn-${userId}`);
+    const audioEl = wrapper.querySelector(`#audio-${userId}`);
+    muteBtn.addEventListener('click', () => {
+      audioEl.muted = !audioEl.muted;
+      muteBtn.textContent = audioEl.muted ? 'تشغيل' : 'كتم';
+    });
+  }
+
+  const audioEl = document.getElementById(`audio-${userId}`);
+  if (audioEl) {
+    audioEl.srcObject = stream;
+    // لو هذا هو الستريم المحلي، نكتمه لتجنب الصدى
+    audioEl.muted = isLocal;
+  }
+
+  // حاول تحديث اسم المستخدم الظاهر إن وُجد في players
+  updateAudioNameFromPlayers(userId);
+}
+
+// إزالة عنصر الصوت
+function removeAudioStream(userId) {
+  const wrapper = document.getElementById(`audio-wrap-${userId}`);
+  if (wrapper) wrapper.remove();
+}
+
+// تحديث اسم المستخدم في واجهة الصوت إن وُجد في قائمة اللاعبين
+function updateAudioNameFromPlayers(userId) {
+  roomRef.get().then(snap => {
+    const data = snap.data();
+    const players = data?.players || [];
+    const p = players.find(x => x.id === userId);
+    if (p) {
+      const nameEl = document.getElementById(`audio-name-${userId}`);
+      const avatarEl = document.getElementById(`audio-avatar-${userId}`);
+      if (nameEl) nameEl.textContent = p.name;
+      if (avatarEl) {
+        avatarEl.src = p.avatar;
+        avatarEl.classList.remove('hidden');
+      }
+    }
+  }).catch(()=>{});
+}
+
+// إنشاء Offers لجميع اللاعبين الآخرين
+async function createOffersToAll() {
+  try {
+    const roomSnap = await roomRef.get();
+    const data = roomSnap.data();
+    const players = data?.players || [];
+    for (const player of players) {
+      if (player.id === currentUser.uid) continue;
+      // إذا لم يكن لدينا اتصال مع هذا اللاعب أو كان مغلقًا، ننشئ واحدًا
+      const pc = createPeerConnection(player.id);
+      // نؤكد أن لدينا LocalDescription قبل إرسال العرض
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await roomRef.collection('webrtc_offers').doc(`${currentUser.uid}_${player.id}`).set({
+          from: currentUser.uid,
+          to: player.id,
+          type: offer.type,
+          sdp: offer.sdp,
+          ts: firebase.firestore.FieldValue.serverTimestamp()
+        });
+      } catch (e) {
+        console.error("Failed to create/send offer to", player.id, e);
+      }
+    }
+  } catch (e) {
+    console.error("createOffersToAll error:", e);
+  }
+}
+
+// تهيئة مستمعي الإشارات (offers/answers/candidates) لمعرف المستخدم الحالي
+function initSignalingListeners() {
+  if (signalingInitialized || !currentUser) return;
+  signalingInitialized = true;
+
+  // ------------------ استقبال Offers موجهة إليّ ------------------
+  roomRef.collection('webrtc_offers').where('to', '==', currentUser.uid)
+    .onSnapshot(async (snapshot) => {
+      for (const change of snapshot.docChanges()) {
+        if (change.type === 'added') {
+          const offerDoc = change.doc;
+          const data = offerDoc.data();
+          // تجاهل العروض التي أنشأناها لأن doc id قد يشتمل علي uid-uid
+          if (!data || data.to !== currentUser.uid) continue;
+          const fromId = data.from;
+          try {
+            const pc = createPeerConnection(fromId);
+            const desc = { type: data.type, sdp: data.sdp };
+            await pc.setRemoteDescription(new RTCSessionDescription(desc));
+            // إنشاؤك للإجابة
+            const answer = await pc.createAnswer();
+            await pc.setLocalDescription(answer);
+            await roomRef.collection('webrtc_answers').doc(`${currentUser.uid}_${fromId}`).set({
+              from: currentUser.uid,
+              to: fromId,
+              type: answer.type,
+              sdp: answer.sdp,
+              ts: firebase.firestore.FieldValue.serverTimestamp()
+            });
+          } catch (e) {
+            console.error("Error handling incoming offer:", e);
+          }
+        }
+      }
+    });
+
+  // ------------------ استقبال Answers موجهة إليّ ------------------
+  roomRef.collection('webrtc_answers').where('to', '==', currentUser.uid)
+    .onSnapshot((snapshot) => {
+      for (const change of snapshot.docChanges()) {
+        if (change.type === 'added') {
+          const data = change.doc.data();
+          if (!data || data.to !== currentUser.uid) continue;
+          const fromId = data.from; // هذا هو من رد عليّ
+          const pc = peerConnections[fromId];
+          if (pc) {
+            const desc = { type: data.type, sdp: data.sdp };
+            pc.setRemoteDescription(new RTCSessionDescription(desc)).catch(e => {
+              console.error("Failed to set remote answer:", e);
+            });
+          }
+        }
+      }
+    });
+
+  // ------------------ استقبال ICE candidates موجهة إليّ ------------------
+  roomRef.collection('webrtc_candidates').where('to', '==', currentUser.uid)
+    .onSnapshot((snapshot) => {
+      snapshot.docChanges().forEach(async (change) => {
+        if (change.type === 'added') {
+          const data = change.doc.data();
+          if (!data) return;
+          const fromId = data.from;
+          const pc = peerConnections[fromId];
+          if (pc) {
+            try {
+              await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (e) {
+              console.warn("addIceCandidate failed:", e);
+            }
+          }
+        }
+      });
+    });
+}
+
+// إيقاف الصوت واغلاق الاتصالات وتنظيف مستندات signaling
+async function stopAudio() {
+  // اغلاق peerConnections
+  for (const id in peerConnections) {
+    try { peerConnections[id].close(); } catch (e){}
+    delete peerConnections[id];
+  }
+
+  // إيقاف الستريم المحلي
+  if (localStream) {
+    localStream.getTracks().forEach(t => t.stop());
+    localStream = null;
+  }
+
+  // إزالة عناصر الصوت من الواجهة
+  audioContainer.innerHTML = '';
+
+  // تحديث الحالة
+  audioStatus.textContent = 'حالة الصوت: معطل';
+  toggleAudioLabel.textContent = 'تشغيل الميكروفون';
+  toggleAudioBtn.classList.remove('bg-red-600');
+  toggleAudioBtn.classList.add('bg-green-600');
+
+  // محاولة حذف مستندات signaling التي أنشأها هذا المستخدم (offers/answers/candidates)
+  try {
+    const offers = await roomRef.collection('webrtc_offers').where('from', '==', currentUser.uid).get();
+    for (const d of offers.docs) await d.ref.delete().catch(()=>{});
+    const answers = await roomRef.collection('webrtc_answers').where('from', '==', currentUser.uid).get();
+    for (const d of answers.docs) await d.ref.delete().catch(()=>{});
+    const candsFrom = await roomRef.collection('webrtc_candidates').where('from', '==', currentUser.uid).get();
+    for (const d of candsFrom.docs) await d.ref.delete().catch(()=>{});
+    const candsTo = await roomRef.collection('webrtc_candidates').where('to', '==', currentUser.uid).get();
+    for (const d of candsTo.docs) await d.ref.delete().catch(()=>{});
+  } catch (e) {
+    console.warn("Failed to clean signaling docs (maybe security rules)?", e);
+  }
+}
+
+// تشغيل/إيقاف الميكروفون عند الضغط
+toggleAudioBtn.addEventListener('click', async () => {
+  try {
+    if (!localStream) {
+      // طلب إذن الميكروفون وتشغيله
+      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      addAudioStream(currentUser.uid, localStream, true);
+      audioStatus.textContent = 'حالة الصوت: مفعل';
+      toggleAudioLabel.textContent = 'إيقاف الميكروفون';
+      toggleAudioBtn.classList.remove('bg-green-600');
+      toggleAudioBtn.classList.add('bg-red-600');
+
+      // تهيئة المستمعين على الإشارات لو لم تكن مهيئة
+      initSignalingListeners();
+
+      // إرسال Offer لكل اللاعبين الحاليين
+      await createOffersToAll();
+    } else {
+      // إيقاف الصوت وتنظيف
+      await stopAudio();
+    }
+  } catch (err) {
+    console.error("Mic error:", err);
+    alert("فشل تشغيل الميكروفون: " + (err.message || err));
+  }
+});
+
+// ----------------- مراقبة تغيّر قائمة اللاعبين لربط لاعبين جدد -----------------
 roomRef.onSnapshot((docSnap) => {
   if (!docSnap.exists) {
     alert("تم إغلاق هذه الغرفة!");
@@ -223,10 +529,11 @@ roomRef.onSnapshot((docSnap) => {
 
   const data = docSnap.data();
   
-  // تحديث قائمة اللاعبين
+  // تحديث قائمة اللاعبين (الواجهة)
   const playersList = document.getElementById('players-list');
   playersList.innerHTML = '';
-  data.players.forEach(player => {
+  const players = data.players || [];
+  players.forEach(player => {
     const playerElement = document.createElement('div');
     playerElement.className = 'flex items-center space-x-3 bg-white p-3 rounded-lg shadow';
     
@@ -234,13 +541,14 @@ roomRef.onSnapshot((docSnap) => {
       <img src="${player.avatar}" alt="${player.name}" class="w-10 h-10 rounded-full">
       <span class="font-bold ${player.id === (currentUser?.uid || '') ? 'text-amber-600' : 'text-gray-800'}">${player.name}</span>
       ${player.id === data.creator ? '<span class="bg-amber-100 text-amber-800 text-xs px-2 py-1 rounded">المضيف</span>' : ''}
+      ${player.id !== (currentUser?.uid || '') ? '<span class="ml-auto text-xs text-gray-500">🔊</span>' : ''}
     `;
     
     playersList.appendChild(playerElement);
   });
   
-  document.getElementById('players-count').textContent = data.players.length;
-  
+  document.getElementById('players-count').textContent = players.length;
+
   // تحديث حالة الجولة
   const questionText = document.getElementById('question-text');
   const currentPlayerElement = document.getElementById('current-player');
@@ -267,7 +575,6 @@ roomRef.onSnapshot((docSnap) => {
   chatBox.innerHTML = "";
   
   if (data.chat && data.chat.length > 0) {
-    // ترتيب الرسائل حسب الوقت
     const sortedChat = [...data.chat].sort((a, b) => 
       (a.timestamp?.seconds || 0) - (b.timestamp?.seconds || 0)
     );
@@ -294,158 +601,40 @@ roomRef.onSnapshot((docSnap) => {
     
     chatBox.scrollTop = chatBox.scrollHeight;
   }
-});
 
+  // ----> عندما يدخل لاعب جديد: إذا كان لدي صوت محلي، أرسل Offer لهذا اللاعب الجديد
+  const currentPlayerIds = players.map(p => p.id);
+  // اكتشاف لاعبين جدد
+  const newPlayers = currentPlayerIds.filter(id => !lastPlayersIds.includes(id));
+  lastPlayersIds = currentPlayerIds;
 
-// ====================== الدردشة الصوتية (WebRTC + Firestore) ======================
-
-const toggleAudioBtn = document.getElementById('toggle-audio-btn');
-const audioContainer = document.getElementById('audio-container');
-
-let localStream = null;
-let peerConnections = {};
-
-// تشغيل / إيقاف المايك
-toggleAudioBtn.addEventListener('click', async () => {
-  if (!localStream) {
-    try {
-      localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      addAudioStream(currentUser.uid, localStream, true);
-      toggleAudioBtn.textContent = "🔇 إيقاف الميكروفون";
-
-      // مشاركة الصوت مع الآخرين
-      createOffer();
-    } catch (err) {
-      console.error("Mic error:", err);
-      alert("فشل تشغيل الميكروفون: " + err.message);
-    }
-  } else {
-    stopAudio();
-  }
-});
-
-function stopAudio() {
-  localStream.getTracks().forEach(track => track.stop());
-  localStream = null;
-  const audioEl = document.getElementById(`audio-${currentUser.uid}`);
-  if (audioEl) audioEl.remove();
-  toggleAudioBtn.textContent = "🎤 تشغيل الميكروفون";
-}
-
-// إضافة عنصر صوت
-function addAudioStream(userId, stream, isLocal = false) {
-  let audioEl = document.getElementById(`audio-${userId}`);
-  if (!audioEl) {
-    audioEl = document.createElement("audio");
-    audioEl.id = `audio-${userId}`;
-    audioEl.autoplay = true;
-    audioEl.controls = false;
-    audioEl.className = "w-full";
-    if (isLocal) audioEl.muted = true;
-    audioContainer.appendChild(audioEl);
-  }
-  audioEl.srcObject = stream;
-}
-
-// إنشاء اتصال
-function createPeerConnection(peerId) {
-  const pc = new RTCPeerConnection();
-  peerConnections[peerId] = pc;
-
-  // إضافة الصوت
-  if (localStream) {
-    localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
-  }
-
-  // استقبال الصوت
-  pc.ontrack = (event) => {
-    addAudioStream(peerId, event.streams[0]);
-  };
-
-  // مشاركة ICE
-  pc.onicecandidate = (event) => {
-    if (event.candidate) {
-      roomRef.collection("candidates").add({
-        from: currentUser.uid,
-        to: peerId,
-        candidate: event.candidate.toJSON()
-      });
-    }
-  };
-
-  return pc;
-}
-
-// إنشاء Offer
-async function createOffer() {
-  const roomSnap = await roomRef.get();
-  const data = roomSnap.data();
-
-  for (let player of data.players) {
-    if (player.id === currentUser.uid) continue;
-    const pc = createPeerConnection(player.id);
-    const offer = await pc.createOffer();
-    await pc.setLocalDescription(offer);
-
-    await roomRef.collection("offers").doc(`${currentUser.uid}_${player.id}`).set({
-      from: currentUser.uid,
-      to: player.id,
-      sdp: offer
-    });
-  }
-}
-
-// الاستماع للـ Offers
-roomRef.collection("offers").where("to", "==", auth.currentUser?.uid || "").onSnapshot(async (snapshot) => {
-  for (const change of snapshot.docChanges()) {
-    if (change.type === "added") {
-      const offer = change.doc.data();
-      const pc = createPeerConnection(offer.from);
-      await pc.setRemoteDescription(new RTCSessionDescription(offer.sdp));
-
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-
-      await roomRef.collection("answers").doc(`${auth.currentUser.uid}_${offer.from}`).set({
-        from: auth.currentUser.uid,
-        to: offer.from,
-        sdp: answer
-      });
-    }
-  }
-});
-
-// الاستماع للـ Answers
-roomRef.collection("answers").where("to", "==", auth.currentUser?.uid || "").onSnapshot(async (snapshot) => {
-  for (const change of snapshot.docChanges()) {
-    if (change.type === "added") {
-      const answer = change.doc.data();
-      const pc = peerConnections[answer.from];
-      if (pc) {
-        await pc.setRemoteDescription(new RTCSessionDescription(answer.sdp));
-      }
-    }
-  }
-});
-
-// الاستماع للـ ICE Candidates
-roomRef.collection("candidates").where("to", "==", auth.currentUser?.uid || "").onSnapshot((snapshot) => {
-  snapshot.docChanges().forEach(async (change) => {
-    if (change.type === "added") {
-      const data = change.doc.data();
-      const pc = peerConnections[data.from];
-      if (pc) {
+  // إذا لدينا localStream مفعل، أرسل عروض (offers) إلى اللاعبين الجدد
+  if (localStream && newPlayers.length > 0) {
+    // استثناء نفس المستخدم
+    const targets = newPlayers.filter(id => id !== currentUser?.uid);
+    // ارسال لكل واحد
+    (async () => {
+      for (const peerId of targets) {
         try {
-          await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+          const pc = createPeerConnection(peerId);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          await roomRef.collection('webrtc_offers').doc(`${currentUser.uid}_${peerId}`).set({
+            from: currentUser.uid,
+            to: peerId,
+            type: offer.type,
+            sdp: offer.sdp,
+            ts: firebase.firestore.FieldValue.serverTimestamp()
+          });
         } catch (e) {
-          console.error("Error adding ICE candidate:", e);
+          console.error("Error sending offer to new player:", e);
         }
       }
-    }
-  });
+    })();
+  }
 });
 
-// تعيين معالج الأحداث
+// ----------------- أحداث الواجهة -----------------
 copyRoomIdBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(roomId);
   copyRoomIdBtn.innerHTML = '<i class="fas fa-check"></i>';
@@ -459,19 +648,21 @@ skipQuestionBtn.addEventListener('click', skipQuestion);
 sendMessageBtn.addEventListener('click', sendMessage);
 leaveRoomBtn.addEventListener('click', leaveRoom);
 
-// السماح بالضغط على Enter في الدردشة
 chatInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') {
     sendMessage();
   }
 });
 
-// مراقبة حالة المصادقة
+// محادثة برمجية: تهيئة المستخدم والمزامنة
 auth.onAuthStateChanged((user) => {
   currentUser = user;
   if (!user) {
     window.location.href = "index.html";
   } else {
-    joinRoom();
+    joinRoom().then(() => {
+      // بعد انضمام المستخدم تأكد من تهيئة مستمعي signaling فقط بعد أن نملك uid
+      initSignalingListeners();
+    });
   }
 });

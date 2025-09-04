@@ -35,15 +35,15 @@
     }
 
     .typing-dots div {
-  animation-duration: 1.4s;
-  animation-iteration-count: infinite;
-  animation-timing-function: ease-in-out;
-}
+      animation-duration: 1.4s;
+      animation-iteration-count: infinite;
+      animation-timing-function: ease-in-out;
+    }
 
-@keyframes bounce {
-  0%, 60%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-5px); }
-}
+    @keyframes bounce {
+      0%, 60%, 100% { transform: translateY(0); }
+      30% { transform: translateY(-5px); }
+    }
   </style>
 </head>
 <body class="arabic-font min-h-screen desert-bg bg-fixed">
@@ -142,24 +142,29 @@
               <div id="typing-indicator" class="hidden px-3 pb-2"></div>
               <!-- سيتم ملؤها بالرسائل -->
             </div>
+
+            <!-- area for audio controls & streams -->
+            <div class="flex items-center justify-between mb-3">
+              <div class="flex items-center space-x-3">
+                <button id="toggle-audio-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-full shadow flex items-center">
+                  <i class="fas fa-microphone mr-2"></i>
+                  <span id="toggle-audio-label">تشغيل الميكروفون</span>
+                </button>
+                <div id="audio-status" class="text-sm text-gray-600">حالة الصوت: معطل</div>
+              </div>
+              <div class="text-xs text-gray-500">انقر لتفعيل الميكروفون — ستحتاج لإذن المتصفح.</div>
+            </div>
+
+            <div id="audio-container" class="space-y-2 mb-4">
+              <!-- سيتم إضافة عناصر الصوت هنا -->
+            </div>
+
             <div class="flex space-x-2">
               <input id="chat-input" type="text" placeholder="اكتب رسالة..." class="flex-1 py-3 px-4 rounded-full border-2 border-amber-300 focus:border-amber-500 focus:outline-none">
               <button id="send-message-btn" class="bg-amber-600 hover:bg-amber-700 text-white w-12 h-12 rounded-full flex items-center justify-center shadow-lg">
                 <i class="fas fa-paper-plane"></i>
               </button>
             </div>
-            <!-- أزرار الصوت -->
-<div class="mt-4 flex space-x-2">
-  <button id="toggle-audio-btn" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-full shadow">
-    🎤 تشغيل الميكروفون
-  </button>
-</div>
-
-<!-- مساحة عرض الصوت -->
-<div id="audio-container" class="mt-4 space-y-2">
-  <!-- سيتم إضافة الأصوات هنا -->
-</div>
-
           </div>
         </div>
       </div>
