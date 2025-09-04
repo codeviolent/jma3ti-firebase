@@ -172,7 +172,7 @@ function stopTimer() {
   clearInterval(timerInterval);
   timerContainer.classList.add('hidden');
   timerElement.classList.remove('text-red-500', 'animate__animated', 'animate__pulse');
-  timerElement.textContent = '30';
+  timerElement.textContent = '60';
 }
 
 // ===================== بدء وتخطي الجولة =====================
