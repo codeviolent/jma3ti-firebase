@@ -12,6 +12,7 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
+// ===================== عناصر وحقول =====================
 const urlParams = new URLSearchParams(window.location.search);
 const roomId = urlParams.get('room') || 'default-room';
 const roomRef = db.collection('rooms').doc(roomId);
@@ -36,7 +37,11 @@ let currentRoomData = null;
 let chosenEmoji = null;
 let chosenColor = "#d97706";
 
-// ===================== تخصيص اللاعب =====================
+// Presence & intervals
+let presenceInterval = null;       // يحدّث lastSeen كل 15s
+let hostCleanupInterval = null;    // المضيف ينظف اللاعبين غير النشطين كل 30s
+
+// ===================== تخصيص اللاعب (modal) =====================
 const modal = document.getElementById("customize-modal");
 const emojiBtns = document.querySelectorAll(".emoji-btn");
 const colorPicker = document.getElementById("color-picker");
@@ -44,19 +49,44 @@ const saveCustomizationBtn = document.getElementById("save-customization");
 
 emojiBtns.forEach(btn => {
   btn.addEventListener("click", () => {
-    chosenEmoji = btn.textContent;
-    emojiBtns.forEach(b => b.classList.remove("ring-4", "ring-amber-500"));
-    btn.classList.add("ring-4", "ring-amber-500");
+    emojiBtns.forEach(b => b.classList.remove("emoji-selected"));
+    btn.classList.add("emoji-selected");
+    chosenEmoji = btn.textContent.trim();
   });
 });
-colorPicker.addEventListener("input", (e) => {
-  chosenColor = e.target.value;
-});
-saveCustomizationBtn.addEventListener("click", async () => {
-  if (!chosenEmoji) chosenEmoji = "🙂";
-  modal.classList.add("hidden");
-  await savePlayerData();
-});
+if (colorPicker) {
+  colorPicker.addEventListener("input", (e) => {
+    chosenColor = e.target.value;
+  });
+}
+if (saveCustomizationBtn) {
+  saveCustomizationBtn.addEventListener("click", async () => {
+    if (!chosenEmoji) chosenEmoji = "🙂";
+    if (!chosenColor) chosenColor = "#d97706";
+    modal.classList.add("hidden");
+    await savePlayerData();
+    // بعد حفظ اللاعب، أبدأ presence و (إن كنت مضيفاً) تنظيف المضيف
+    startPresenceHeartbeat();
+    startHostCleanupIfNeeded();
+  });
+}
+
+// ===================== أدوات مساعدة =====================
+function escapeHtml(text) {
+  if (!text) return '';
+  return text.replace(/[&<>"'`=\/]/g, function (s) {
+    return ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+      '/': '&#x2F;',
+      '`': '&#x60;',
+      '=': '&#x3D;'
+    })[s];
+  });
+}
 
 // ===================== انضمام للغرفة =====================
 async function joinRoom() {
@@ -73,33 +103,142 @@ async function joinRoom() {
     return;
   }
 
-  const data = snap.data();
+  const data = snap.data() || {};
 
-  // لو ما فيه مضيف، عيّن هذا اللاعب
-  if (!data.creator) {
-    await roomRef.update({ creator: currentUser.uid });
+  // تعيين creator إن لم يكن موجودًا (transaction لتقليل التعارض)
+  try {
+    await db.runTransaction(async (tx) => {
+      const d = await tx.get(roomRef);
+      if (!d.exists) throw "no-doc";
+      const dd = d.data();
+      if (!dd.creator) tx.update(roomRef, { creator: currentUser.uid });
+    });
+  } catch (e) {
+    // تجاهل الأخطاء هنا — قد يكون تم تعيين creator من لاعب آخر
   }
 
-  // تحقق إذا اللاعب مسجل بالفعل
+  // هل اللاعب موجود مسبقًا؟
   const players = data.players || [];
-  const exists = players.find(p => p.id === currentUser.uid);
-  if (!exists) {
-    modal.classList.remove("hidden"); // أظهر نافذة اختيار الإيموجي واللون
+  const existing = players.find(p => p.id === currentUser.uid);
+  if (existing) {
+    // خزّن الاختيارات محلياً وابدأ heartbeat
+    chosenEmoji = existing.emoji || "🙂";
+    chosenColor = existing.color || chosenColor;
+    startPresenceHeartbeat();
+    startHostCleanupIfNeeded();
+    return;
   }
+
+  // جديد → أظهر نافذة الاختيار
+  if (modal) modal.classList.remove("hidden");
 }
 
+// ===================== حفظ بيانات اللاعب =====================
 async function savePlayerData() {
+  if (!currentUser) return;
   const playerData = {
     id: currentUser.uid,
     name: currentUser.displayName || 'مستخدم',
     avatar: currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png',
-    emoji: chosenEmoji,
-    color: chosenColor
+    emoji: chosenEmoji || '🙂',
+    color: chosenColor || '#d97706'
   };
 
-  await roomRef.update({
-    players: firebase.firestore.FieldValue.arrayUnion(playerData)
+  // نقرأ ونكتب المصفوفة بالكامل لتجنّب مشاكل arrayRemove/arrayUnion مع الأوبجكتات
+  const snap = await roomRef.get();
+  const data = snap.data() || {};
+  const players = data.players || [];
+  const filtered = players.filter(p => p.id !== currentUser.uid);
+  filtered.push(playerData);
+  await roomRef.update({ players: filtered });
+
+  // أنشئ مستند حضور خاص بهذا اللاعب
+  await roomRef.collection('presence').doc(currentUser.uid).set({
+    uid: currentUser.uid,
+    lastSeen: firebase.firestore.FieldValue.serverTimestamp()
   });
+}
+
+// ===================== presence (heartbeat & cleanup) =====================
+
+// تحدث تايم ستامب الحضور كل 15 ثانية
+function startPresenceHeartbeat() {
+  stopPresenceHeartbeat(); // نمنع مضاعفات
+  if (!currentUser) return;
+  // تحديث فوري أولاً
+  roomRef.collection('presence').doc(currentUser.uid).set({
+    uid: currentUser.uid,
+    lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(()=>{});
+  // ثم تحديث دوري
+  presenceInterval = setInterval(() => {
+    roomRef.collection('presence').doc(currentUser.uid).set({
+      uid: currentUser.uid,
+      lastSeen: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch(()=>{});
+  }, 15000);
+}
+
+function stopPresenceHeartbeat() {
+  if (presenceInterval) {
+    clearInterval(presenceInterval);
+    presenceInterval = null;
+  }
+}
+
+// إذا كنت المضيف فابدأ مهمة تنظيف اللاعبين غير النشطين كل 30 ثانية
+function startHostCleanupIfNeeded() {
+  stopHostCleanup();
+  if (!currentUser) return;
+  roomRef.get().then(snap => {
+    const data = snap.exists ? snap.data() : {};
+    if (data && data.creator === currentUser.uid) {
+      // فقط المضيف يقوم بالتنظيف الدوري
+      hostCleanupInterval = setInterval(() => {
+        pruneStalePlayers().catch(()=>{});
+      }, 30000);
+    }
+  }).catch(()=>{});
+}
+
+function stopHostCleanup() {
+  if (hostCleanupInterval) {
+    clearInterval(hostCleanupInterval);
+    hostCleanupInterval = null;
+  }
+}
+
+// حذف اللاعبين الذين لم يظهروا presence منذ أكثر من 60 ثانية
+async function pruneStalePlayers() {
+  const thresholdMs = 60 * 1000; // 60s
+  // اجلب كل مستندات presence
+  const presSnap = await roomRef.collection('presence').get();
+  const now = Date.now();
+  const staleUids = [];
+  presSnap.forEach(doc => {
+    const d = doc.data();
+    if (!d || !d.lastSeen) return;
+    const ts = d.lastSeen.toDate().getTime();
+    if ((now - ts) > thresholdMs) staleUids.push(d.uid);
+  });
+
+  if (staleUids.length === 0) return;
+
+  // اقرأ players وازِل اللاعبين المطابقين
+  const roomSnap = await roomRef.get();
+  if (!roomSnap.exists) return;
+  const data = roomSnap.data() || {};
+  const players = data.players || [];
+  const filtered = players.filter(p => !staleUids.includes(p.id));
+
+  if (filtered.length !== players.length) {
+    await roomRef.update({ players: filtered }).catch(e => console.warn('prune update failed', e));
+  }
+
+  // أحذف مستندات presence الخاصة بهم
+  for (const uid of staleUids) {
+    await roomRef.collection('presence').doc(uid).delete().catch(()=>{});
+  }
 }
 
 // ===================== إرسال رسالة =====================
@@ -126,7 +265,6 @@ async function sendMessage() {
   setTyping(false);
 }
 
-// ===================== جلب الإيموجي واللون =====================
 function getPlayerEmoji(uid) {
   const players = currentRoomData?.players || [];
   const player = players.find(p => p.id === uid);
@@ -145,40 +283,13 @@ function setTyping(isTyping) {
     name: currentUser.displayName || 'مستخدم',
     typing: isTyping,
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  }).catch(e => console.warn('typing set failed:', e));
 }
 
-// ===================== المؤقت =====================
-function startTimer(seconds) {
-  clearInterval(timerInterval);
-  let remaining = seconds;
-  timerContainer.classList.remove('hidden');
-  timerElement.textContent = remaining;
-
-  timerInterval = setInterval(() => {
-    remaining--;
-    timerElement.textContent = remaining;
-    if (remaining <= 5) {
-      timerElement.classList.add('text-red-500', 'animate__animated', 'animate__pulse');
-    }
-    if (remaining <= 0) {
-      clearInterval(timerInterval);
-      endRound();
-    }
-  }, 1000);
-}
-
-function stopTimer() {
-  clearInterval(timerInterval);
-  timerContainer.classList.add('hidden');
-  timerElement.classList.remove('text-red-500', 'animate__animated', 'animate__pulse');
-  timerElement.textContent = '60';
-}
-
-// ===================== بدء وتخطي الجولة =====================
+// ===================== بدء/تخطي/إنهاء الجولة =====================
 async function startRound() {
   const snap = await roomRef.get();
-  const data = snap.data();
+  const data = snap.data() || {};
 
   if (data.creator && data.creator !== currentUser.uid) {
     alert('فقط المضيف يمكنه بدء الجولة.');
@@ -230,48 +341,102 @@ async function endRound() {
   stopTimer();
 }
 
-// ===================== الاستماع لحالة الغرفة =====================
+// ===================== المؤقت (متزامن للجميع) =====================
+function startTimer(seconds) {
+  clearInterval(timerInterval);
+  let remaining = seconds;
+  timerContainer.classList.remove('hidden');
+  timerElement.textContent = remaining;
+
+  timerInterval = setInterval(() => {
+    remaining--;
+    timerElement.textContent = remaining;
+    if (remaining <= 5) {
+      timerElement.classList.add('text-red-500', 'animate__animated', 'animate__pulse');
+    }
+    if (remaining <= 0) {
+      clearInterval(timerInterval);
+      endRound();
+    }
+  }, 1000);
+}
+
+function stopTimer() {
+  clearInterval(timerInterval);
+  timerContainer.classList.add('hidden');
+  timerElement.classList.remove('text-red-500', 'animate__animated', 'animate__pulse');
+  timerElement.textContent = '60';
+}
+
+// ===================== إزالة اللاعب من players (آمنة) =====================
+async function removeSelfFromPlayers() {
+  if (!currentUser) return;
+  try {
+    const snap = await roomRef.get();
+    if (!snap.exists) return;
+    const data = snap.data() || {};
+    const players = data.players || [];
+    const filtered = players.filter(p => p.id !== currentUser.uid);
+    if (filtered.length !== players.length) {
+      await roomRef.update({ players: filtered });
+    }
+    // احذف وثيقة presence و typing للمستخدم
+    await roomRef.collection('presence').doc(currentUser.uid).delete().catch(()=>{});
+    await roomRef.collection('typing').doc(currentUser.uid).delete().catch(()=>{});
+  } catch (e) {
+    console.warn('removeSelfFromPlayers failed:', e);
+  }
+}
+
+// ===================== مستمعو Firestore =====================
 roomRef.onSnapshot((doc) => {
   if (!doc.exists) return;
-  currentRoomData = doc.data();
+  currentRoomData = doc.data() || {};
   const data = currentRoomData;
 
-  // قائمة اللاعبين
+  // تحديث قائمة اللاعبين
   const players = data.players || [];
   const playersList = document.getElementById('players-list');
   playersList.innerHTML = "";
   players.forEach(p => {
     playersList.innerHTML += `
       <div class="flex items-center space-x-3 bg-white p-3 rounded-lg shadow">
-        <span style="font-size:20px">${p.emoji || "🙂"}</span>
+        <span style="font-size:20px">${escapeHtml(p.emoji || "🙂")}</span>
         <span class="font-bold" style="color:${p.color || "#333"}">
-          ${p.name} ${data.creator === p.id ? "(المضيف)" : ""}
+          ${escapeHtml(p.name)} ${data.creator === p.id ? "(المضيف)" : ""}
         </span>
       </div>`;
   });
   document.getElementById('players-count').textContent = players.length;
 
-  // تحديث السؤال الحالي
+  // تحديث السؤال واللاعب الحالي
   document.getElementById('question-text').textContent =
     data.currentQuestion || "لم يتم اختيار سؤال بعد.";
   document.getElementById('current-player').textContent =
     data.currentPlayer?.name || "---";
 
-  // المؤقت يظهر للجميع بشكل متزامن
+  // المؤقت المتزامن: استخدم questionStartTime
   if (data.status === 'playing' && data.questionStartTime) {
+    // قد يكون questionStartTime من نوع Timestamp
     const startTime = data.questionStartTime.toDate().getTime();
     const now = Date.now();
     const elapsed = Math.floor((now - startTime) / 1000);
-    const remaining = 30 - elapsed;
+    const remaining = 60 - elapsed;
     if (remaining > 0) startTimer(remaining);
     else stopTimer();
   }
+
   if (data.status === 'waiting') {
     stopTimer();
   }
+
+  // تمكين/تعطيل زر البدء بحسب كونك المضيف
+  if (data.creator && currentUser) {
+    startRoundBtn.disabled = data.creator !== currentUser.uid;
+  }
 });
 
-// ===================== الاستماع للرسائل =====================
+// الرسائل
 roomRef.collection("chat").orderBy("timestamp")
   .onSnapshot((snap) => {
     const chatBox = document.getElementById('chat-messages');
@@ -283,16 +448,16 @@ roomRef.collection("chat").orderBy("timestamp")
       let content = "";
       if (msg.type === "answer") {
         content = `
-          <div class="font-bold text-sm">${msg.senderEmoji || "🙂"} ${msg.senderName}</div>
-          <div class="text-gray-600">❓ ${msg.question}</div>
-          <div style="color:${msg.senderColor || "#333"}">💬 ${msg.text}</div>
+          <div class="font-bold text-sm">${escapeHtml(msg.senderEmoji || "🙂")} ${escapeHtml(msg.senderName)}</div>
+          <div class="text-gray-600">❓ ${escapeHtml(msg.question || '')}</div>
+          <div style="color:${msg.senderColor || "#333"}">💬 ${escapeHtml(msg.text)}</div>
         `;
       } else {
         content = `
           <div class="font-bold text-sm" style="color:${msg.senderColor || "#333"}">
-            ${msg.senderEmoji || "🙂"} ${msg.senderName}
+            ${escapeHtml(msg.senderEmoji || "🙂")} ${escapeHtml(msg.senderName)}
           </div>
-          <p>${msg.text}</p>
+          <p>${escapeHtml(msg.text)}</p>
         `;
       }
 
@@ -306,7 +471,7 @@ roomRef.collection("chat").orderBy("timestamp")
     chatBox.scrollTop = chatBox.scrollHeight;
   });
 
-// ===================== الاستماع لمؤشر الكتابة =====================
+// مؤشر الكتابة
 roomRef.collection("typing").onSnapshot((snap) => {
   let typingUsers = [];
   snap.forEach(doc => {
@@ -319,14 +484,17 @@ roomRef.collection("typing").onSnapshot((snap) => {
   typingIndicator.classList.toggle("hidden", typingUsers.length === 0);
 });
 
-// ===================== أحداث =====================
+// ===================== أحداث الواجهة =====================
 sendMessageBtn.addEventListener('click', sendMessage);
-chatInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') sendMessage();
-  else {
-    setTyping(true);
-    clearTimeout(typingTimeout);
-    typingTimeout = setTimeout(() => setTyping(false), 2000);
+chatInput.addEventListener('input', () => {
+  setTyping(true);
+  clearTimeout(typingTimeout);
+  typingTimeout = setTimeout(() => setTyping(false), 2000);
+});
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    sendMessage();
   }
 });
 copyRoomIdBtn.addEventListener('click', () => {
@@ -334,13 +502,41 @@ copyRoomIdBtn.addEventListener('click', () => {
   copyRoomIdBtn.innerHTML = '<i class="fas fa-check"></i>';
   setTimeout(() => copyRoomIdBtn.innerHTML = '<i class="fas fa-copy"></i>', 2000);
 });
-leaveRoomBtn.addEventListener('click', () => window.location.href = "index.html");
 startRoundBtn.addEventListener('click', startRound);
 skipQuestionBtn.addEventListener('click', skipQuestion);
 
-// ===================== مصادقة =====================
-auth.onAuthStateChanged((u) => {
-  currentUser = u;
-  if (!u) window.location.href = "index.html";
-  else joinRoom();
+// عند الضغط على الخروج — نزيل اللاعب ثم نعيد للمؤشر
+leaveRoomBtn.addEventListener('click', async () => {
+  try {
+    await removeSelfFromPlayers();
+  } catch(_) {}
+  stopPresenceHeartbeat();
+  stopHostCleanup();
+  window.location.href = 'index.html';
+});
+
+// تنظيف عند غلق التبويب (محاولة جادة لكن لا ضمان)
+window.addEventListener('beforeunload', () => {
+  try {
+    if (currentUser) {
+      // محاولة مزج عملية سريعة: احذف presence و players
+      // removeSelfFromPlayers يقوم بقراءة/كتابة لذا لا ننتظر اكتماله لأن المستعرض قد يغلق
+      removeSelfFromPlayers();
+    }
+  } catch (e) {}
+});
+
+// ===================== المصادقة والبدء =====================
+auth.onAuthStateChanged(async (user) => {
+  currentUser = user;
+  if (!user) {
+    window.location.href = 'index.html';
+  } else {
+    // إذا colorPicker موجود حدّده محلياً
+    if (typeof colorPicker !== 'undefined' && colorPicker && colorPicker.value) chosenColor = colorPicker.value;
+    await joinRoom();
+    // لو كان المستخدم موجودًا سابقاً فابدأ heartbeat (إذا لم يبدأ في save)
+    startPresenceHeartbeat();
+    startHostCleanupIfNeeded();
+  }
 });
