@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>لوحة تحكم الإدارة</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --primary: #3B82F6;
+      --secondary: #8B5CF6;
+      --success: #10B981;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --dark: #1F2937;
+      --light: #F9FAFB;
+    }
+    
+    body {
+      font-family: 'Tajawal', sans-serif;
+      background-color: #F3F4F6;
+      min-height: 100vh;
+    }
+    
+    .admin-card {
+      transition: all 0.3s ease;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+      background: white;
+    }
+    
+    .admin-card:hover {
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    }
+    
+    .nav-tab {
+      transition: all 0.3s ease;
+      border-bottom: 3px solid transparent;
+    }
+    
+    .nav-tab.active {
+      border-bottom: 3px solid var(--secondary);
+      color: var(--secondary);
+    }
+    
+    .stat-card {
+      border-radius: 12px;
+      overflow: hidden;
+      background: white;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+    }
+    
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), #2563EB);
+      transition: all 0.3s ease;
+    }
+    
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2);
+    }
+    
+    .btn-success {
+      background: linear-gradient(135deg, var(--success), #059669);
+      transition: all 0.3s ease;
+    }
+    
+    .btn-success:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 6px rgba(16, 185, 129, 0.2);
+    }
+    
+    .btn-danger {
+      background: linear-gradient(135deg, var(--danger), #DC2626);
+      transition: all 0.3s ease;
+    }
+    
+    .btn-danger:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 6px rgba(239, 68, 68, 0.2);
+    }
+    
+    .transaction-item {
+      transition: all 0.3s ease;
+      border-left: 4px solid var(--warning);
+    }
+    
+    .transaction-item:hover {
+      transform: translateX(-5px);
+    }
+    
+    .form-input {
+      transition: all 0.3s ease;
+      border: 1px solid #D1D5DB;
+      border-radius: 8px;
+    }
+    
+    .form-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+    
+    .badge {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    
+    .badge-pending {
+      background-color: #FEF3C7;
+      color: #92400E;
+    }
+    
+    .badge-approved {
+      background-color: #D1FAE5;
+      color: #065F46;
+    }
+    
+    .badge-rejected {
+      background-color: #FEE2E2;
+      color: #B91C1C;
+    }
+    
+    .sidebar {
+      width: 250px;
+      height: 100vh;
+      position: fixed;
+      top: 0;
+      right: 0;
+      background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+      color: white;
+      transition: all 0.3s ease;
+    }
+    
+    .main-content {
+      margin-right: 250px;
+      transition: all 0.3s ease;
+    }
+    
+    @media (max-width: 768px) {
+      .sidebar {
+        right: -250px;
+      }
+      .sidebar.active {
+        right: 0;
+      }
+      .main-content {
+        margin-right: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Sidebar -->
+  <div class="sidebar hidden md:block">
+    <div class="p-5">
+      <h1 class="text-xl font-bold mb-2">لوحة التحكم</h1>
+      <p class="text-sm text-indigo-200">نظام إدارة متجر الحزم</p>
+    </div>
+    <nav class="mt-10">
+      <a href="#" class="nav-item block py-3 px-5 bg-indigo-700 text-white">
+        <i class="fas fa-tachometer-alt ml-2"></i>الإحصائيات
+      </a>
+      <a href="#" class="nav-item block py-3 px-5 text-indigo-200 hover:bg-indigo-700">
+        <i class="fas fa-shopping-cart ml-2"></i>طلبات الشراء
+      </a>
+      <a href="#" class="nav-item block py-3 px-5 text-indigo-200 hover:bg-indigo-700">
+        <i class="fas fa-box-open ml-2"></i>إدارة الحزم
+      </a>
+      <a href="#" class="nav-item block py-3 px-5 text-indigo-200 hover:bg-indigo-700">
+        <i class="fas fa-users ml-2"></i>المستخدمين
+      </a>
+      <a href="#" class="nav-item block py-3 px-5 text-indigo-200 hover:bg-indigo-700">
+        <i class="fas fa-cog ml-2"></i>الإعدادات
+      </a>
+    </nav>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Header -->
+    <header class="bg-white shadow-sm">
+      <div class="flex justify-between items-center p-4">
+        <button id="sidebarToggle" class="md:hidden text-gray-600">
+          <i class="fas fa-bars text-xl"></i>
+        </button>
+        <h1 class="text-xl font-bold text-gray-800">لوحة تحكم الإدارة</h1>
+        <button onclick="auth.signOut()" class="bg-gray-100 text-gray-700 px-4 py-2 rounded-lg font-medium hover:bg-gray-200 transition">
+          <i class="fas fa-sign-out-alt ml-1"></i>تسجيل خروج
+        </button>
+      </div>
+    </header>
+
+    <div class="p-6">
+      <!-- Stats Section -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="stat-card p-5">
+          <div class="flex justify-between items-center">
+            <div>
+              <p class="text-sm text-gray-500">إجمالي الطلبات</p>
+              <h3 class="text-2xl font-bold" id="totalOrders">0</h3>
+            </div>
+            <div class="bg-blue-100 p-3 rounded-full">
+              <i class="fas fa-shopping-cart text-blue-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        
+        <div class="stat-card p-5">
+          <div class="flex justify-between items-center">
+            <div>
+              <p class="text-sm text-gray-500">طلبات pending</p>
+              <h3 class="text-2xl font-bold" id="pendingOrders">0</h3>
+            </div>
+            <div class="bg-amber-100 p-3 rounded-full">
+              <i class="fas fa-clock text-amber-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        
+        <div class="stat-card p-5">
+          <div class="flex justify-between items-center">
+            <div>
+              <p class="text-sm text-gray-500">الحزم المتاحة</p>
+              <h3 class="text-2xl font-bold" id="totalPacks">0</h3>
+            </div>
+            <div class="bg-green-100 p-3 rounded-full">
+              <i class="fas fa-box-open text-green-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+        
+        <div class="stat-card p-5">
+          <div class="flex justify-between items-center">
+            <div>
+              <p class="text-sm text-gray-500">المستخدمين</p>
+              <h3 class="text-2xl font-bold" id="totalUsers">0</h3>
+            </div>
+            <div class="bg-purple-100 p-3 rounded-full">
+              <i class="fas fa-users text-purple-600 text-xl"></i>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Navigation Tabs -->
+      <div class="bg-white rounded-lg shadow-sm p-1 flex mb-6 overflow-x-auto">
+        <button id="transactionsTab" class="nav-tab active flex-1 py-3 px-4 text-center font-medium whitespace-nowrap" onclick="switchTab('transactions')">
+          <i class="fas fa-shopping-cart ml-2"></i>طلبات الشراء
+        </button>
+        <button id="packsTab" class="nav-tab flex-1 py-3 px-4 text-center font-medium whitespace-nowrap" onclick="switchTab('packs')">
+          <i class="fas fa-box-open ml-2"></i>إدارة الحزم
+        </button>
+        <button id="usersTab" class="nav-tab flex-1 py-3 px-4 text-center font-medium whitespace-nowrap" onclick="switchTab('users')">
+          <i class="fas fa-users ml-2"></i>المستخدمين
+        </button>
+      </div>
+
+      <!-- Transactions Section -->
+      <section id="transactionsSection" class="mb-8">
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-lg font-bold text-gray-800">طلبات الشراء (قيد الانتظار)</h2>
+            <div class="flex space-x-2">
+              <button class="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg text-sm font-medium">
+                <i class="fas fa-filter ml-1"></i>تصفية
+              </button>
+              <button class="bg-gray-100 text-gray-700 px-3 py-1 rounded-lg text-sm font-medium">
+                <i class="fas fa-sync-alt ml-1"></i>تحديث
+              </button>
+            </div>
+          </div>
+          <div id="transactions" class="space-y-4"></div>
+          <div id="emptyTransactions" class="hidden text-center py-10">
+            <i class="fas fa-check-circle text-4xl text-gray-300 mb-3"></i>
+            <p class="text-gray-500">لا توجد طلبات شراء قيد الانتظار</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Packs Section -->
+      <section id="packsSection" class="hidden">
+        <div class="bg-white rounded-xl shadow-sm p-6 mb-6">
+          <h2 class="text-lg font-bold text-gray-800 mb-4">إضافة حزمة جديدة</h2>
+          <form id="addPackForm" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <div>
+              <label class="block text-gray-700 mb-2 font-medium">اسم الحزمة</label>
+              <input id="packName" class="form-input p-3 w-full" placeholder="أدخل اسم الحزمة"/>
+            </div>
+            <div>
+              <label class="block text-gray-700 mb-2 font-medium">السعر (جنية)</label>
+              <input id="packPrice" type="number" class="form-input p-3 w-full" placeholder="أدخل السعر"/>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-gray-700 mb-2 font-medium">وصف الحزمة</label>
+              <textarea id="packDesc" class="form-input p-3 w-full" placeholder="أدخل وصف الحزمة" rows="2"></textarea>
+            </div>
+            <div class="md:col-span-2">
+              <label class="block text-gray-700 mb-2 font-medium">الأسئلة (سطر لكل سؤال)</label>
+              <textarea id="packQuestions" class="form-input p-3 w-full" placeholder="ضع كل سؤال في سطر جديد" rows="5"></textarea>
+            </div>
+            <div class="md:col-span-2">
+              <button class="btn-primary text-white px-6 py-3 rounded-lg font-medium">
+                <i class="fas fa-plus-circle ml-2"></i>إضافة حزمة
+              </button>
+            </div>
+          </form>
+
+          <h2 class="text-lg font-bold text-gray-800 mb-4">الحزم المتاحة</h2>
+          <div id="packs" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+          <div id="emptyPacks" class="hidden text-center py-10">
+            <i class="fas fa-box-open text-4xl text-gray-300 mb-3"></i>
+            <p class="text-gray-500">لا توجد حزم متاحة</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Users Section -->
+      <section id="usersSection" class="hidden">
+        <div class="bg-white rounded-xl shadow-sm p-6">
+          <h2 class="text-lg font-bold text-gray-800 mb-4">إدارة المستخدمين</h2>
+          <div class="bg-yellow-50 border-l-4 border-yellow-400 p-4 mb-6">
+            <div class="flex">
+              <div class="flex-shrink-0">
+                <i class="fas fa-exclamation-circle text-yellow-400"></i>
+              </div>
+              <div class="mr-3">
+                <p class="text-sm text-yellow-700">
+                  هذه الميزة قيد التطوير وسيتم إضافتها قريباً.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white p-8 rounded-2xl shadow-xl flex flex-col items-center">
+      <div class="w-16 h-16 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p class="text-gray-700 font-medium">جاري التحميل...</p>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyA3vUkDU4rLDxcIfY0ZYXzvw8GznlG9gc8",
+    authDomain: "bechar-8b049.firebaseapp.com",
+    projectId: "bechar-8b049",
+    storageBucket: "bechar-8b049.appspot.com",
+    messagingSenderId: "394161915136",
+    appId: "1:394161915136:web:23da8f9f82393f66af5fe5"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const auth = firebase.auth();
+
+  const transactionsContainer = document.getElementById('transactions');
+  const packsContainer = document.getElementById('packs');
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  const emptyTransactions = document.getElementById('emptyTransactions');
+  const emptyPacks = document.getElementById('emptyPacks');
+  const transactionsSection = document.getElementById('transactionsSection');
+  const packsSection = document.getElementById('packsSection');
+  const usersSection = document.getElementById('usersSection');
+  const transactionsTab = document.getElementById('transactionsTab');
+  const packsTab = document.getElementById('packsTab');
+  const usersTab = document.getElementById('usersTab');
+  const sidebarToggle = document.getElementById('sidebarToggle');
+  const sidebar = document.querySelector('.sidebar');
+
+  // Stats elements
+  const totalOrdersEl = document.getElementById('totalOrders');
+  const pendingOrdersEl = document.getElementById('pendingOrders');
+  const totalPacksEl = document.getElementById('totalPacks');
+  const totalUsersEl = document.getElementById('totalUsers');
+
+  let allTransactions = [];
+  let allPacks = [];
+
+  // Toggle sidebar on mobile
+  sidebarToggle.addEventListener('click', () => {
+    sidebar.classList.toggle('active');
+  });
+
+  // Tab switching function
+  function switchTab(tabName) {
+    transactionsTab.classList.remove('active');
+    packsTab.classList.remove('active');
+    usersTab.classList.remove('active');
+    
+    transactionsSection.classList.add('hidden');
+    packsSection.classList.add('hidden');
+    usersSection.classList.add('hidden');
+    
+    if (tabName === 'transactions') {
+      transactionsTab.classList.add('active');
+      transactionsSection.classList.remove('hidden');
+      loadTransactions();
+    } else if (tabName === 'packs') {
+      packsTab.classList.add('active');
+      packsSection.classList.remove('hidden');
+      loadPacks();
+    } else if (tabName === 'users') {
+      usersTab.classList.add('active');
+      usersSection.classList.remove('hidden');
+    }
+  }
+
+  // Show loading overlay
+  function showLoading() {
+    loadingOverlay.classList.remove('hidden');
+  }
+  
+  // Hide loading overlay
+  function hideLoading() {
+    loadingOverlay.classList.add('hidden');
+  }
+
+  // Load statistics
+  function loadStats() {
+    // Load transactions count
+    db.collection('transactions').get().then(snap => {
+      totalOrdersEl.textContent = snap.size;
+    });
+    
+    // Load pending transactions count
+    db.collection('transactions').where('status', '==', 'pending').get().then(snap => {
+      pendingOrdersEl.textContent = snap.size;
+    });
+    
+    // Load packs count
+    db.collection('questionPacks').get().then(snap => {
+      totalPacksEl.textContent = snap.size;
+    });
+    
+    // Load users count (placeholder - you might need to adjust this based on your user collection)
+    db.collection('users').get().then(snap => {
+      totalUsersEl.textContent = snap.size;
+    });
+  }
+
+  // Load pending transactions
+  function loadTransactions() {
+    showLoading();
+    db.collection('transactions').where('status', '==', 'pending').onSnapshot(snap => {
+      transactionsContainer.innerHTML = '';
+      allTransactions = [];
+      
+      if (snap.empty) {
+        emptyTransactions.classList.remove('hidden');
+        hideLoading();
+        return;
+      }
+      
+      emptyTransactions.classList.add('hidden');
+      
+      snap.forEach(doc => {
+        const t = doc.data();
+        allTransactions.push({ id: doc.id, ...t });
+        
+        const el = document.createElement('div');
+        el.className = 'transaction-item bg-white p-4 rounded-lg border border-gray-200';
+        el.innerHTML = `
+          <div class="flex justify-between items-start mb-3">
+            <div>
+              <span class="badge badge-pending">قيد الانتظار</span>
+            </div>
+            <div class="text-sm text-gray-500">${formatDate(t.createdAt)}</div>
+          </div>
+          
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            <div>
+              <p class="text-sm text-gray-500">رقم المستخدم</p>
+              <p class="font-medium">${t.uid}</p>
+            </div>
+            <div>
+              <p class="text-sm text-gray-500">رقم الهاتف</p>
+              <p class="font-medium">${t.phone}</p>
+            </div>
+            <div>
+              <p class="text-sm text-gray-500">رقم المعاملة</p>
+              <p class="font-medium">${t.transactionId}</p>
+            </div>
+            <div>
+              <p class="text-sm text-gray-500">الحزمة</p>
+              <p class="font-medium">${t.packId}</p>
+            </div>
+          </div>
+          
+          <div class="flex space-x-2">
+            <button class="btn-approve btn-success text-white px-4 py-2 rounded-lg font-medium" data-id="${doc.id}" data-uid="${t.uid}" data-pack="${t.packId}">
+              <i class="fas fa-check-circle ml-2"></i>موافقة
+            </button>
+            <button class="btn-reject btn-danger text-white px-4 py-2 rounded-lg font-medium" data-id="${doc.id}">
+              <i class="fas fa-times-circle ml-2"></i>رفض
+            </button>
+          </div>
+        `;
+        transactionsContainer.appendChild(el);
+      });
+      
+      // Attach events
+      document.querySelectorAll('.btn-approve').forEach(b => {
+        b.addEventListener('click', async (e) => {
+          const id = b.getAttribute('data-id');
+          const uid = b.getAttribute('data-uid');
+          const pack = b.getAttribute('data-pack');
+          
+          showLoading();
+          try {
+            // Add pack to user
+            await db.collection('users').doc(uid).set({ 
+              ownedPacks: firebase.firestore.FieldValue.arrayUnion(pack) 
+            }, { merge: true });
+            
+            // Mark transaction as approved
+            await db.collection('transactions').doc(id).update({ 
+              status: 'approved',
+              approvedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            alert('تم تفعيل الحزمة للمستخدم بنجاح!');
+          } catch (error) {
+            alert('حدث خطأ أثناء التفعيل: ' + error.message);
+          }
+          hideLoading();
+        });
+      });
+      
+      document.querySelectorAll('.btn-reject').forEach(b => {
+        b.addEventListener('click', async () => {
+          const id = b.getAttribute('data-id');
+          
+          if (!confirm('هل أنت متأكد من رفض هذه المعاملة؟')) return;
+          
+          showLoading();
+          try {
+            await db.collection('transactions').doc(id).update({ 
+              status: 'rejected',
+              rejectedAt: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            alert('تم رفض المعاملة بنجاح!');
+          } catch (error) {
+            alert('حدث خطأ أثناء الرفض: ' + error.message);
+          }
+          hideLoading();
+        });
+      });
+      
+      hideLoading();
+    }, error => {
+      hideLoading();
+      alert('حدث خطأ في تحميل المعاملات: ' + error.message);
+    });
+  }
+
+  // Load packs
+  function loadPacks() {
+    showLoading();
+    db.collection('questionPacks').onSnapshot(snap => {
+      packsContainer.innerHTML = '';
+      allPacks = [];
+      
+      if (snap.empty) {
+        emptyPacks.classList.remove('hidden');
+        hideLoading();
+        return;
+      }
+      
+      emptyPacks.classList.add('hidden');
+      
+      snap.forEach(doc => {
+        const p = doc.data();
+        allPacks.push({ id: doc.id, ...p });
+        
+        const el = document.createElement('div');
+        el.className = 'admin-card p-4';
+        el.innerHTML = `
+          <div class="flex justify-between items-start mb-3">
+            <h3 class="font-bold text-gray-800">${p.name}</h3>
+            <span class="bg-blue-100 text-blue-800 text-xs font-medium px-2.5 py-0.5 rounded">${p.price} ج</span>
+          </div>
+          <p class="text-sm text-gray-600 mb-3">${p.description}</p>
+          <div class="flex justify-between items-center">
+            <span class="text-xs text-gray-500">${p.questions.length} سؤال</span>
+            <div class="flex space-x-2">
+              <button class="text-indigo-600 hover:text-indigo-800" data-id="${doc.id}">
+                <i class="fas fa-edit"></i>
+              </button>
+              <button class="text-red-600 hover:text-red-800" data-id="${doc.id}">
+                <i class="fas fa-trash"></i>
+              </button>
+            </div>
+          </div>
+        `;
+        packsContainer.appendChild(el);
+      });
+      
+      hideLoading();
+    }, error => {
+      hideLoading();
+      alert('حدث خطأ في تحميل الحزم: ' + error.message);
+    });
+  }
+
+  // Format date
+  function formatDate(timestamp) {
+    if (!timestamp) return 'غير محدد';
+    const date = timestamp.toDate();
+    return date.toLocaleDateString('ar-EG') + ' ' + date.toLocaleTimeString('ar-EG');
+  }
+
+  // Add new pack form
+  document.getElementById('addPackForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    
+    const name = document.getElementById('packName').value.trim();
+    const desc = document.getElementById('packDesc').value.trim();
+    const price = parseInt(document.getElementById('packPrice').value);
+    const questions = document.getElementById('packQuestions').value.split('\n').map(q => q.trim()).filter(Boolean);
+    
+    if (!name || !desc || isNaN(price) || questions.length === 0) {
+      alert('يرجى ملء جميع الحقول بشكل صحيح');
+      return;
+    }
+    
+    showLoading();
+    try {
+      await db.collection('questionPacks').add({ 
+        name, 
+        description: desc, 
+        price, 
+        questions,
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      
+      e.target.reset();
+      alert('تم إضافة الحزمة بنجاح!');
+      loadPacks();
+      loadStats();
+    } catch (error) {
+      alert('حدث خطأ أثناء إضافة الحزمة: ' + error.message);
+    }
+    hideLoading();
+  });
+
+  // Authentication state handler
+  auth.onAuthStateChanged(u => {
+    if (!u) {
+      const pw = prompt('لوحة الإدارة - ادخل كلمة المرور البسيطة (اختياري)'); 
+      // You can implement admin auth here; for now allow access
+      loadStats();
+      loadTransactions();
+      loadPacks();
+    } else {
+      loadStats();
+      loadTransactions();
+      loadPacks();
+    }
+  });
+  </script>
+</body>
+</html>

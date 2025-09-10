@@ -84,7 +84,7 @@
             </div>
 
             <div id="current-player-box" class="mb-6">
-              <h3>جاوب</h3>
+              <h3 class="mb-2">جاوب الآن</h3>
               <div class="inline-block bg-amber-100 px-4 py-2 rounded-full">
                 <span class="font-bold text-amber-800">اللاعب:</span>
                 <span id="current-player" class="font-bold">---</span>
@@ -95,11 +95,18 @@
               <button id="start-round-btn" class="bg-amber-600 hover:bg-amber-700 text-white px-6 py-3 rounded-full font-bold shadow-lg">
                 <i class="fas fa-play mr-2"></i> بدء الجولة
               </button>
+              
               <button id="skip-question-btn" class="bg-amber-200 hover:bg-amber-300 text-amber-800 px-6 py-3 rounded-full font-bold shadow-lg hidden">
                 <i class="fas fa-forward mr-2"></i> تخطي
               </button>
             </div>
           </div>
+        </div>
+
+        <!-- اختر الحزمة (تظهر فقط إذا لدى المستخدم حزم) -->
+        <div id="pack-choice-container" class="mb-3 hidden">
+          <label class="block font-bold mb-1">📦 اختر الحزمة</label>
+          <select id="pack-select" class="border rounded px-2 py-1 w-full"></select>
         </div>
 
         <!-- Chat Box -->

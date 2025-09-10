@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>jma3ti-store</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    :root {
+      --primary: #3B82F6;
+      --secondary: #F59E0B;
+      --accent: #b95f10;
+      --dark: #1F2937;
+      --light: #F9FAFB;
+    }
+    
+    body {
+      font-family: 'Tajawal', sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+      min-height: 100vh;
+    }
+    
+    .game-card {
+      transition: all 0.3s ease;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+      background: white;
+      position: relative;
+    }
+    
+    .game-card:hover {
+      transform: translateY(-5px);
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+    }
+    
+    .game-card::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--secondary), var(--accent));
+    }
+    
+    .pack-badge {
+      position: absolute;
+      top: -10px;
+      left: -10px;
+      background: var(--secondary);
+      color: white;
+      font-weight: bold;
+      padding: 5px 15px;
+      border-radius: 20px;
+      font-size: 14px;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      z-index: 10;
+    }
+    
+    .buy-btn {
+      background: linear-gradient(135deg, var(--secondary), #ED8936);
+      transition: all 0.3s ease;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    
+    .buy-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
+    }
+    
+    .modal-content {
+      animation: modalFadeIn 0.3s ease;
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    }
+    
+    @keyframes modalFadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    
+    .pulse {
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.7);
+      }
+      70% {
+        box-shadow: 0 0 0 10px rgba(245, 158, 11, 0);
+      }
+      100% {
+        box-shadow: 0 0 0 0 rgba(245, 158, 11, 0);
+      }
+    }
+    
+    .owned-badge {
+      background: linear-gradient(135deg, var(--accent), #d36134);
+      color: white;
+      padding: 2px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    
+    .header-gradient {
+      background: linear-gradient(135deg, #d2a679 0%, #442c1f 100%);
+      color: white;
+      border-radius: 0 0 20px 20px;
+    }
+    
+    .nav-tab {
+      transition: all 0.3s ease;
+      border-bottom: 3px solid transparent;
+    }
+    
+    .nav-tab.active {
+      border-bottom: 3px solid var(--secondary);
+      color: var(--secondary);
+    }
+  </style>
+</head>
+<body class="min-h-screen pb-10">
+  <!-- Header -->
+  <header class="header-gradient shadow-lg">
+    <div class="container mx-auto px-4 py-6">
+      <div class="flex justify-between items-center">
+        <div>
+          <h1 class="text-2xl md:text-3xl font-bold"><i class="fas fa-store mr-2"></i> حزم الأسئلة</h1>
+          <p class="mt-1">استمتع  مع حزم الأسئلة المتنوعة!</p>
+        </div>
+        <a href="index.html" class="bg-white text-indigo-700 px-4 py-2 rounded-lg font-semibold shadow-md hover:bg-gray-100 transition">
+          <i class="fas fa-sign-out-alt mr-1"></i> خروج
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Navigation Tabs -->
+  <div class="container mx-auto px-4 -mt-4">
+    <div class="bg-white rounded-lg shadow-lg p-1 flex mb-6">
+      <button id="storeTab" class="nav-tab active flex-1 py-3 px-4 text-center font-semibold" onclick="switchTab('store')">
+        <i class="fas fa-shopping-cart mr-1"></i>المتجر
+      </button>
+      <button id="myPacksTab" class="nav-tab flex-1 py-3 px-4 text-center font-semibold" onclick="switchTab('myPacks')">
+        <i class="fas fa-box-open mr-1"></i>الحزم الخاصة بي
+      </button>
+    </div>
+  </div>
+
+  <main class="container mx-auto px-4">
+    <!-- Store Section -->
+    <section id="storeSection">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+        <!-- Pack cards will be loaded here -->
+        <div id="packs" class="space-y-6"></div>
+      </div>
+    </section>
+
+    <!-- My Packs Section -->
+    <section id="myPacksSection" class="hidden">
+      <div class="bg-white rounded-2xl shadow-lg p-6 mb-6">
+        <h2 class="text-xl font-bold mb-4 text-gray-800"><i class="fas fa-crown text-amber-500 mr-2"></i>الحزم التي أملكها</h2>
+        <div id="myPacksContainer" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <!-- Owned packs will be loaded here -->
+        </div>
+        <div id="emptyPacksMessage" class="hidden text-center py-10">
+          <i class="fas fa-box-open text-4xl text-gray-300 mb-3"></i>
+          <p class="text-gray-500">لا تمتلك أي حزم بعد. ابدأ بالشراء من المتجر!</p>
+          <button onclick="switchTab('store')" class="mt-4 bg-amber-500 hover:bg-amber-600 text-white px-6 py-2 rounded-lg font-semibold transition">
+            تصفح المتجر
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Payment Modal -->
+  <div id="paymentModal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center p-4 z-50">
+    <div class="modal-content bg-white rounded-2xl w-full max-w-md overflow-hidden">
+      <div class="bg-gradient-to-r from-amber-500 to-amber-600 p-4 text-white">
+        <h2 class="text-xl font-bold"><i class="fas fa-credit-card mr-2"></i>إتمام عملية الشراء</h2>
+        <p class="text-sm mt-1">انسخ الرقم الظاهر وأرسل المبلغ عبر التحويل البنكي لإكمال طلبك بسهولة</p>
+        
+        
+        <div class="flex items-center space-x-2 mt-1 text-sm">
+  <!-- شعار البنك -->
+  <img src="bankily-logo.png" alt="بنكيلي" class="w-10 h-10">
+
+  <!-- الرقم -->
+  <span id="bankilyNumber" class="select-text">29 84 13 38</span>
+
+  <!-- زر نسخ -->
+  <button onclick="copyBankily()" class="text-blue-600 hover:text-blue-800 text-xs">
+    نسخ
+  </button>
+  
+</div>
+
+<script>
+  function copyBankily() {
+    const number = document.getElementById("bankilyNumber").innerText;
+    navigator.clipboard.writeText(number).then(() => {
+      alert(" تم نسخ الرقم: " + number);
+    });
+  }
+</script>
+
+
+      </div>
+      
+      <div class="p-6">
+        <div class="mb-4">
+          <label class="block text-gray-700 mb-2 font-medium">رقم الهاتف (المحول منه)</label>
+          <input id="phoneInput" placeholder="مثال: 05XXXXXXXX" 
+                 class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"/>
+        </div>
+        
+        <div class="mb-6">
+          <label class="block text-gray-700 mb-2 font-medium">رقم المعاملة</label>
+          <input id="txInput" placeholder="أدخل رقم المعاملة من التحويل البنكي" 
+                 class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-amber-500 focus:border-transparent"/>
+        </div>
+        
+        <div class="flex gap-3">
+          <button id="confirmBuy" class="flex-1 bg-gradient-to-r from-green-500 to-green-600 text-white py-3 rounded-lg font-semibold shadow-md hover:from-green-600 hover:to-green-700 transition">
+            <i class="fas fa-check-circle mr-1"></i>تأكيد الشراء
+          </button>
+          <button id="cancelBuy" class="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-semibold hover:bg-gray-300 transition">
+            <i class="fas fa-times mr-1"></i>إلغاء
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loading Overlay -->
+  <div id="loadingOverlay" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+    <div class="bg-white p-8 rounded-2xl shadow-xl flex flex-col items-center">
+      <div class="w-16 h-16 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+      <p class="text-gray-700 font-medium">جاري التحميل...</p>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+  <script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyA3vUkDU4rLDxcIfY0ZYXzvw8GznlG9gc8",
+    authDomain: "bechar-8b049.firebaseapp.com",
+    projectId: "bechar-8b049",
+    storageBucket: "bechar-8b049.appspot.com",
+    messagingSenderId: "394161915136",
+    appId: "1:394161915136:web:23da8f9f82393f66af5fe5"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  const auth = firebase.auth();
+
+  const packsDiv = document.getElementById('packs');
+  const paymentModal = document.getElementById('paymentModal');
+  const phoneInput = document.getElementById('phoneInput');
+  const txInput = document.getElementById('txInput');
+  const confirmBuy = document.getElementById('confirmBuy');
+  const cancelBuy = document.getElementById('cancelBuy');
+  const loadingOverlay = document.getElementById('loadingOverlay');
+  const myPacksContainer = document.getElementById('myPacksContainer');
+  const emptyPacksMessage = document.getElementById('emptyPacksMessage');
+  const storeSection = document.getElementById('storeSection');
+  const myPacksSection = document.getElementById('myPacksSection');
+  const storeTab = document.getElementById('storeTab');
+  const myPacksTab = document.getElementById('myPacksTab');
+
+  let selectedPackId = null;
+  let ownedPacks = [];
+
+  // Tab switching function
+  function switchTab(tabName) {
+    if (tabName === 'store') {
+      storeSection.classList.remove('hidden');
+      myPacksSection.classList.add('hidden');
+      storeTab.classList.add('active');
+      myPacksTab.classList.remove('active');
+    } else {
+      storeSection.classList.add('hidden');
+      myPacksSection.classList.remove('hidden');
+      storeTab.classList.remove('active');
+      myPacksTab.classList.add('active');
+      loadMyPacks(auth.currentUser.uid);
+    }
+  }
+
+  // Show loading overlay
+  function showLoading() {
+    loadingOverlay.classList.remove('hidden');
+  }
+  
+  // Hide loading overlay
+  function hideLoading() {
+    loadingOverlay.classList.add('hidden');
+  }
+
+  // Load available packs
+  function loadPacks() {
+    showLoading();
+    db.collection('questionPacks').onSnapshot(snap => {
+      packsDiv.innerHTML = '';
+      snap.forEach(doc => {
+        const p = doc.data();
+        const isOwned = ownedPacks.includes(doc.id);
+        
+        const el = document.createElement('div');
+        el.className = 'game-card';
+        el.innerHTML = `
+          ${isOwned ? '<div class="owned-badge">مملوك</div>' : '<div class="pack-badge">جديد</div>'}
+          <div class="p-5">
+            <h3 class="font-bold text-xl text-gray-800">${p.name}</h3>
+            <p class="text-gray-600 mt-2 text-sm min-h-[40px]">${p.description}</p>
+            <div class="flex items-center mt-4 text-sm text-gray-500">
+              <i class="fas fa-question-circle ml-1"></i>
+              <span>${p.questions.length} سؤال</span>
+            </div>
+            <div class="flex justify-between items-center mt-6">
+              <div class="text-2xl font-bold text-amber-600">${p.price} <span class="text-sm">MRU</span></div>
+              ${isOwned ? 
+                `<button class="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-semibold" disabled>
+                  <i class="fas fa-check-circle mr-1"></i>مملوك
+                </button>` : 
+                `<button class="buy-btn px-4 py-2 rounded-lg font-semibold text-white pulse" data-id="${doc.id}">
+                  <i class="fas fa-shopping-cart mr-1"></i>شراء الآن
+                </button>`
+              }
+            </div>
+          </div>
+        `;
+        packsDiv.appendChild(el);
+      });
+
+      // Attach buy listeners
+      document.querySelectorAll('.buy-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          selectedPackId = e.currentTarget.getAttribute('data-id');
+          paymentModal.classList.remove('hidden');
+        });
+      });
+      
+      hideLoading();
+    }, error => {
+      hideLoading();
+      alert('حدث خطأ في تحميل الحزم: ' + error.message);
+    });
+  }
+
+  // Load user's owned packs
+  function loadMyPacks(uid) {
+    showLoading();
+    db.collection("users").doc(uid).onSnapshot(async doc => {
+      myPacksContainer.innerHTML = '';
+      
+      if (!doc.exists || !doc.data().ownedPacks || doc.data().ownedPacks.length === 0) {
+        emptyPacksMessage.classList.remove('hidden');
+        myPacksContainer.classList.add('hidden');
+        hideLoading();
+        return;
+      }
+      
+      emptyPacksMessage.classList.add('hidden');
+      myPacksContainer.classList.remove('hidden');
+      ownedPacks = doc.data().ownedPacks || [];
+      
+      for (const pid of ownedPacks) {
+        const pdoc = await db.collection("questionPacks").doc(pid).get();
+        if (pdoc.exists) {
+          const p = pdoc.data();
+          const el = document.createElement('div');
+          el.className = 'bg-white p-4 rounded-xl border border-gray-200 shadow-sm';
+          el.innerHTML = `
+            <div class="flex justify-between items-start">
+              <div>
+                <h3 class="font-bold text-gray-800">${p.name}</h3>
+                <p class="text-sm text-gray-600 mt-1">${p.description}</p>
+              </div>
+              <span class="owned-badge">مملوك</span>
+            </div>
+            <div class="mt-4 flex justify-between items-center">
+              <span class="text-sm text-gray-500">${p.questions.length} سؤال</span>
+              <a href="index.html" class="bg-indigo-100 text-indigo-700 px-3 py-1 rounded-lg text-sm font-medium">
+                <i class="fas fa-play mr-1"></i>ابدأ اللعب
+              </a>
+            </div>
+          `;
+          myPacksContainer.appendChild(el);
+        }
+      }
+      
+      hideLoading();
+    }, error => {
+      hideLoading();
+      alert('حدث خطأ في تحميل الحزم الخاصة بك: ' + error.message);
+    });
+  }
+
+  // Event listeners for payment modal
+  cancelBuy.addEventListener('click', () => {
+    paymentModal.classList.add('hidden');
+    phoneInput.value = '';
+    txInput.value = '';
+  });
+
+  confirmBuy.addEventListener('click', async () => {
+    const phone = phoneInput.value.trim();
+    const tx = txInput.value.trim();
+    
+    if (!phone || !tx) {
+      alert('يرجى إدخال رقم الهاتف ورقم المعاملة');
+      return;
+    }
+    
+    const user = auth.currentUser;
+    if (!user) {
+      alert('يجب تسجيل الدخول أولاً');
+      return;
+    }
+
+    showLoading();
+    
+    try {
+      await db.collection('transactions').add({
+        uid: user.uid,
+        phone,
+        transactionId: tx,
+        packId: selectedPackId,
+        status: 'pending',
+        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+      });
+      
+      alert('تم إرسال طلب الشراء بنجاح! سيتم مراجعة طلبك وتفعيل الحزمة خلال 24 ساعة.');
+      paymentModal.classList.add('hidden');
+      phoneInput.value = '';
+      txInput.value = '';
+    } catch (error) {
+      alert('حدث خطأ أثناء إرسال الطلب: ' + error.message);
+    }
+    
+    hideLoading();
+  });
+
+  // Authentication state handler
+  auth.onAuthStateChanged(u => {
+    if (!u) {
+      window.location.href = 'index.html';
+    } else {
+      // Load user data to get owned packs
+      db.collection("users").doc(u.uid).get().then(doc => {
+        if (doc.exists) {
+          ownedPacks = doc.data().ownedPacks || [];
+        }
+        loadPacks();
+        loadMyPacks(u.uid);
+      });
+    }
+  });
+
+  // Close modal when clicking outside
+  window.addEventListener('click', (e) => {
+    if (e.target === paymentModal) {
+      paymentModal.classList.add('hidden');
+    }
+  });
+  </script>
+</body>
+</html>

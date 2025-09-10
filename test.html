@@ -1,209 +1,32 @@
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>jma3ti</title>
-  <!-- خطوط جوجل -->
-  <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700&display=swap" rel="stylesheet">
-  <!-- أيقونات -->
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-  <!-- Animate.css -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css">
-  <!-- Tailwind CSS من خلال CDN (للإنتاج يمكنك استخدام الطريقة المثلى) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Reem+Kufi&display=swap');
-    .arabic-font {
-      font-family: 'Tajawal', 'Reem Kufi', sans-serif;
-    }
-    .desert-bg {
-      background-image: url(bd.webp);
-      background-size: cover;
-      background-position: center;
-    }
-
-    @keyframes moveText {
-    0% {transform: translateX(0);}
-    50% {transform: translateX(50px);}
-    100% {transform: translateX(0);}
-    } 
-    .move_2 {
-    animation: moveText 2s infinite;
-    }
-
-
-    .promo-banner {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    width: 300px;
-    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
-    border-radius: 12px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.1);
-    border: 1px solid #e0e0e0;
-    z-index: 1000;
-    overflow: hidden;
-    animation: floatBanner 3s ease-in-out infinite alternate;
-}
-
-@keyframes floatBanner {
-    0% { transform: translateY(0); }
-    100% { transform: translateY(-5px); }
-}
-
-.promo-container {
-    position: relative;
-}
-
-.promo-messages {
-    background: #2c3e50;
-    color: white;
-    padding: 10px 15px;
-    text-align: center;
-    font-size: 14px;
-}
-
-.message {
-    display: none;
-    animation: fadeIn 0.5s ease-in-out;
-}
-
-.message.active {
-    display: block;
-}
-
-.highlight {
-    color: #f1c40f;
-    font-weight: bold;
-}
-
-.promo-slider {
-    position: relative;
-    height: 180px;
-    overflow: hidden;
-}
-
-.promo-slide {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    padding: 15px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    opacity: 0;
-    transition: opacity 0.5s ease-in-out;
-}
-
-.promo-slide.active {
-    opacity: 1;
-}
-
-.company-logo {
-    max-width: 150px;
-    max-height: 50px;
-    margin-bottom: 10px;
-}
-
-.promo-content {
-    text-align: center;
-}
-
-.promo-content h3 {
-    color: #2c3e50;
-    font-size: 16px;
-    margin-bottom: 8px;
-}
-
-.promo-content p {
-    color: #7f8c8d;
-    font-size: 14px;
-    margin-bottom: 12px;
-}
-
-.promo-btn {
-    display: inline-block;
-    background: #3498db;
-    color: white;
-    padding: 6px 15px;
-    border-radius: 20px;
-    text-decoration: none;
-    font-size: 13px;
-    transition: all 0.3s ease;
-}
-
-.promo-btn:hover {
-    background: #2980b9;
-    transform: translateY(-2px);
-}
-
-.promo-code {
-    background: #f1c40f;
-    color: #2c3e50;
-    padding: 2px 6px;
-    border-radius: 4px;
-    font-weight: bold;
-}
-
-.promo-controls {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 15px;
-    background: #f8f9fa;
-    border-top: 1px solid #e0e0e0;
-}
-
-.prev-btn, .next-btn {
-    background: transparent;
-    border: none;
-    color: #7f8c8d;
-    font-size: 20px;
-    cursor: pointer;
-    transition: color 0.3s ease;
-}
-
-.prev-btn:hover, .next-btn:hover {
-    color: #3498db;
-}
-
-.slide-dots {
-    display: flex;
-    gap: 5px;
-}
-
-.slide-dots .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: #bdc3c7;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.slide-dots .dot.active {
-    background: #3498db;
-    transform: scale(1.2);
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
-}
-
-
-
-
-
-
-
-.promo-container {
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إعلان متجر حزم الأسئلة</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700;800&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Tajawal', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #333;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+        
+        .promo-container {
             width: 100%;
-            /* max-width: 1200px; */
+            max-width: 1200px;
             perspective: 1000px;
         }
         
@@ -223,7 +46,7 @@
         }
         
         .promo-header {
-            background: linear-gradient(90deg, #d2a679 0%, #442c1f 100%);
+            background: linear-gradient(90deg, #8E44AD 0%, #6C5CE7 100%);
             padding: 30px;
             text-align: center;
             position: relative;
@@ -324,7 +147,7 @@
         .feature-icon {
             width: 50px;
             height: 50px;
-            background: linear-gradient(135deg, #ff8214 0%, #442c1f 100%);
+            background: linear-gradient(135deg, #6C5CE7 0%, #8E44AD 100%);
             border-radius: 50%;
             display: flex;
             justify-content: center;
@@ -338,7 +161,7 @@
         }
         
         .feature-text h3 {
-            color: #833400;
+            color: #6C5CE7;
             margin-bottom: 5px;
             font-weight: 700;
         }
@@ -358,7 +181,7 @@
         .character {
             width: 200px;
             height: 200px;
-            background: linear-gradient(135deg, #d2a679 0%, #442c1f 100%);
+            background: linear-gradient(135deg, #FF9A9E 0%, #FAD0C4 100%);
             border-radius: 50%;
             position: relative;
             display: flex;
@@ -412,7 +235,7 @@
         .floating-item:nth-child(1) {
             top: 20px;
             left: 30px;
-            background: linear-gradient(135deg, #d2a679 0%, #442c1f 100%);
+            background: linear-gradient(135deg, #6C5CE7 0%, #8E44AD 100%);
             animation-delay: 0s;
         }
         
@@ -453,7 +276,7 @@
             display: inline-flex;
             align-items: center;
             gap: 10px;
-            background: linear-gradient(90deg, #d2a679 0%, #6C5CE7 100%);
+            background: linear-gradient(90deg, #8E44AD 0%, #6C5CE7 100%);
             color: white;
             padding: 16px 40px;
             border-radius: 50px;
@@ -479,7 +302,7 @@
             right: 0;
             width: 100%;
             height: 100%;
-            background: linear-gradient(90deg, #d2a679 0%, #442c1f 100%);
+            background: linear-gradient(90deg, #6C5CE7 0%, #8E44AD 100%);
             transition: all 0.5s ease;
             z-index: 1;
         }
@@ -565,93 +388,10 @@
                 height: 50px;
             }
         }
-  </style>
+    </style>
 </head>
-<body class="arabic-font min-h-screen desert-bg bg-fixed">
-  <!-- شريط التنقل -->
-  <nav class="bg-amber-900 bg-opacity-80 text-white shadow-lg">
-    <div class="container mx-auto px-4 py-3 flex justify-between items-center">
-      <div class="flex items-center space-x-2">
-        
-        <span class="text-xl font-bold"> جماعتي</span>
-      </div>
-      <button id="auth-btn" class="bg-amber-700 hover:bg-amber-600 px-4 py-2 rounded-full flex items-center">
-        <i class="fas fa-sign-in-alt mr-2"></i>
-        <span>تسجيل الدخول</span>
-      </button>
-    </div>
-  </nav>
-
-  <!-- المحتوى الرئيسي -->
-  <main class="container mx-auto px-4 py-8">
-    <div class="max-w-3xl mx-auto bg-amber-50 bg-opacity-90 rounded-xl shadow-2xl overflow-hidden animate__animated animate__fadeIn">
-      <!-- رأس الصفحة -->
-      <div class="bg-gradient-to-r from-amber-800 to-amber-600 p-6 text-white text-center">
-        <p align="center" class="move_2"><img src="logo.png" alt="logo" style="width: 120px; margin-bottom: 15px;"></p>
-        <p class="text-lg opacity-90"> ما عندنا الكدر، عندناالفرح والمرح!</p>
-      </div>
-      
-      <!-- محتوى اللعبة -->
-      <div class="p-6 md:p-8">
-        <div id="user-section" class="hidden mb-8 text-center">
-          <div id="user-info" class="flex flex-col items-center mb-6">
-            <img id="user-avatar" class="w-20 h-20 rounded-full border-4 border-amber-500 mb-3" src="" alt="صورة المستخدم">
-            <h2 id="user-name" class="text-xl font-bold text-amber-800"></h2>
-          </div>
-          
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button id="create-room-btn" class="bg-amber-600 hover:bg-amber-700 text-white py-3 px-6 rounded-lg font-bold text-lg transition-all transform hover:scale-105 shadow-lg flex items-center justify-center">
-              <i class="fas fa-plus-circle mr-2"></i> إنشاء غرفة
-            </button>
-            <div class="relative">
-              <input id="room-code-input" type="text" placeholder="أدخل رمز الغرفة" class="w-full py-3 px-4 rounded-lg border-2 border-amber-300 focus:border-amber-500 focus:outline-none">
-              <button id="join-room-btn" class="absolute left-0 top-0 h-full bg-amber-600 hover:bg-amber-700 text-white px-4 rounded-l-lg">
-                <i class="fas fa-sign-in-alt"></i>
-              </button>
-            </div>
-          </div>
-        </div>
-        
-        <div id="guest-section" class="text-center py-8">
-          <div class="bg-amber-100 border-l-4 border-amber-500 p-4 mb-6 rounded">
-            <p class="text-amber-800">يجب تسجيل الدخول لبدء اللعب</p>
-          </div>
-          <button id="auth-btn-large" class="bg-amber-600 hover:bg-amber-700 text-white py-3 px-8 rounded-full font-bold text-lg transition-all transform hover:scale-105 shadow-lg animate__animated animate__pulse animate__infinite">
-            <i class="fab fa-google mr-2"></i> تسجيل الدخول باستخدام جوجل
-          </button>
-        </div>
-      </div>
-      
-      
-      <!-- ميزات اللعبة -->
-      <div class="bg-amber-100 bg-opacity-50 p-6 border-t border-amber-200">
-        <h2 class="text-2xl font-bold text-amber-800 mb-4 text-center">مميزات اللعبة</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div class="bg-white p-4 rounded-lg shadow text-center hover:shadow-lg transition-shadow">
-            <i class="fas fa-users text-amber-600 text-3xl mb-3"></i>
-            <h3 class="font-bold text-amber-800 mb-2">دردشة مباشرة</h3>
-            <p class="text-gray-700">تواصل مع أصدقائك أثناء اللعب</p>
-          </div>
-          <div class="bg-white p-4 rounded-lg shadow text-center hover:shadow-lg transition-shadow">
-            <i class="fas fa-question-circle text-amber-600 text-3xl mb-3"></i>
-            <h3 class="font-bold text-amber-800 mb-2">أسئلة جريئة</h3>
-            <p class="text-gray-700">مجموعة متنوعة من أسئلة الصراحة</p>
-          </div>
-          <div class="bg-white p-4 rounded-lg shadow text-center hover:shadow-lg transition-shadow">
-            <i class="fas fa-stopwatch text-amber-600 text-3xl mb-3"></i>
-            <h3 class="font-bold text-amber-800 mb-2">مؤقت الجولة</h3>
-            <p class="text-gray-700">إدارة وقت اللعب بفعالية</p>
-          </div>
-        </div>
-      </div>
-    </div>
-  </main>
-
-
-
-
-
- <div class="promo-container">
+<body>
+    <div class="promo-container">
         <div class="promo-card">
             <div class="promo-header">
                 <div class="floating-icons">
@@ -672,7 +412,7 @@
                         </div>
                         <div class="feature-text">
                             <h3>مواضيع لا تنتهي</h3>
-                            <p>اختر من بين مئات المواضيع المثيرة </p>
+                            <p>اختر من بين مئات المواضيع المثيرة في الثقافة، الترفيه، العلوم، التاريخ وغيرها الكثير</p>
                         </div>
                     </div>
                     
@@ -682,7 +422,7 @@
                         </div>
                         <div class="feature-text">
                             <h3>تجربة سريعة وسلسة</h3>
-                            <p>بعد شراء الحزمة، ستُضاف مباشرةً إلى لعبتك لتستمتع بها فورًا.</p>
+                            <p>تنزيل فوري بعد الشراء مع دعم كامل لأنظمة التشغيل المختلفة والأجهزة المحمولة</p>
                         </div>
                     </div>
                     
@@ -702,7 +442,7 @@
                         </div>
                         <div class="feature-text">
                             <h3>جودة عالية</h3>
-                            <p>أسئلة محكمة ومنظمة بواسطة مختصين لضمان متعةالترفيه </p>
+                            <p>أسئلة محكمة ومنظمة بواسطة مختصين لضمان متعة التعلم والترفيه معًا</p>
                         </div>
                     </div>
                 </div>
@@ -719,7 +459,7 @@
             </div>
             
             <div class="promo-footer">
-                <a href="store.html" class="cta-button">
+                <a href="/question-packs" class="cta-button">
                     <span>استكشف المتجر الآن</span>
                     <i class="fas fa-arrow-left"></i>
                 </a>
@@ -758,29 +498,5 @@
             });
         });
     </script>
-
-
-
-
-
-  <!-- تذييل الصفحة -->
-  <footer class="bg-amber-900 bg-opacity-80 text-white py-6 mt-12">
-    <div class="container mx-auto px-4 text-center">
-      <p>© 2025 جماعتي . جميع الحقوق محفوظة.</p>
-      <div class="flex justify-center space-x-4 mt-3">
-        <a href="#" class="hover:text-amber-300"><i class="fab fa-facebook"></i></a>
-        <a href="#" class="hover:text-amber-300"><i class="fab fa-tiktok"></i></a>
-      </div>
-    </div>
-  </footer>
-
-  
-
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
-  <script src="payment.js" type="module"></script>
-  <script src="script.js" type="module"></script>
-  
 </body>
 </html>

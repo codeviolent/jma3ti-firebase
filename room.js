@@ -1,4 +1,6 @@
-// ===================== تهيئة Firebase =====================
+// room.js — نسخة مُنقحة مع إصلاح المضيف، منع تكرار الحزم، وضمان عرض اللاعب المختار
+
+// ================ تهيئة Firebase =================
 const firebaseConfig = {
   apiKey: "AIzaSyA3vUkDU4rLDxcIfY0ZYXzvw8GznlG9gc8",
   authDomain: "bechar-8b049.firebaseapp.com",
@@ -7,94 +9,142 @@ const firebaseConfig = {
   messagingSenderId: "394161915136",
   appId: "1:394161915136:web:23da8f9f82393f66af5fe5"
 };
-
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-// ===================== عناصر وحقول =====================
+// ================ عناصر DOM =======================
 const urlParams = new URLSearchParams(window.location.search);
 const roomId = urlParams.get('room') || 'default-room';
 const roomRef = db.collection('rooms').doc(roomId);
 
-const roomCodeElement = document.getElementById('room-code');
-const copyRoomIdBtn = document.getElementById('copy-room-id');
-const leaveRoomBtn = document.getElementById('leave-room-btn');
+const roomCodeEl = document.getElementById('room-code');
+const playersListEl = document.getElementById('players-list');
+const playersCountEl = document.getElementById('players-count');
+const questionTextEl = document.getElementById('question-text');
+const timerContainer = document.getElementById('timer-container');
+const timerEl = document.getElementById('timer');
 const startRoundBtn = document.getElementById('start-round-btn');
 const skipQuestionBtn = document.getElementById('skip-question-btn');
+const currentPlayerEl = document.getElementById('current-player');
+
+const chatBox = document.getElementById('chat-messages');
 const chatInput = document.getElementById('chat-input');
 const sendMessageBtn = document.getElementById('send-message-btn');
 const typingIndicator = document.getElementById('typing-indicator');
-const timerElement = document.getElementById('timer');
-const timerContainer = document.getElementById('timer-container');
 
-roomCodeElement.textContent = roomId;
+const modal = document.getElementById('customize-modal');
+const emojiBtns = document.querySelectorAll('.emoji-btn');
+const colorPicker = document.getElementById('color-picker');
+const saveCustomizationBtn = document.getElementById('save-customization');
 
+const packContainer = document.getElementById('pack-choice-container');
+const packSelect = document.getElementById('pack-select');
+
+if (roomCodeEl) roomCodeEl.textContent = roomId;
+
+// ================ حالات محلية =====================
 let currentUser = null;
+let currentRoomData = null;
 let typingTimeout = null;
 let timerInterval = null;
-let currentRoomData = null;
 let chosenEmoji = null;
-let chosenColor = "#d97706";
+let chosenColor = colorPicker ? colorPicker.value : '#d97706';
+let presenceInterval = null;
 
-// Presence & intervals
-let presenceInterval = null;       // يحدّث lastSeen كل 15s
-let hostCleanupInterval = null;    // المضيف ينظف اللاعبين غير النشطين كل 30s
+let userDocUnsub = null;
+let roomUnsub = null;
+let chatUnsub = null;
+let typingUnsub = null;
 
-// ===================== تخصيص اللاعب (modal) =====================
-const modal = document.getElementById("customize-modal");
-const emojiBtns = document.querySelectorAll(".emoji-btn");
-const colorPicker = document.getElementById("color-picker");
-const saveCustomizationBtn = document.getElementById("save-customization");
+// ================ دوال مساعدة =====================
+function escapeHtml(text){
+  if (text === undefined || text === null) return '';
+  return String(text).replace(/[&<>"'`=\/]/g, s=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60;','=':'&#x3D;'}[s]));
+}
 
-emojiBtns.forEach(btn => {
-  btn.addEventListener("click", () => {
-    emojiBtns.forEach(b => b.classList.remove("emoji-selected"));
-    btn.classList.add("emoji-selected");
+// هل uid هو اللاعب المختار الآن؟ (يتعامل مع string أو object)
+function isCurrentPlayerUid(uid){
+  if (!currentRoomData || !currentRoomData.currentPlayer) return false;
+  const cp = currentRoomData.currentPlayer;
+  if (typeof cp === 'string') return cp === uid;
+  if (cp && typeof cp === 'object') {
+    if (cp.id) return cp.id === uid;
+    if (cp.uid) return cp.uid === uid;
+  }
+  return false;
+}
+
+// ================ modal اختيار الإيموجي واللون =========
+emojiBtns.forEach(btn=>{
+  btn.addEventListener('click', () => {
+    emojiBtns.forEach(b => b.classList.remove('emoji-selected'));
+    btn.classList.add('emoji-selected');
     chosenEmoji = btn.textContent.trim();
   });
 });
 if (colorPicker) {
-  colorPicker.addEventListener("input", (e) => {
-    chosenColor = e.target.value;
-  });
+  colorPicker.addEventListener('input', (e) => chosenColor = e.target.value);
 }
 if (saveCustomizationBtn) {
-  saveCustomizationBtn.addEventListener("click", async () => {
-    if (!chosenEmoji) chosenEmoji = "🙂";
-    if (!chosenColor) chosenColor = "#d97706";
-    modal.classList.add("hidden");
+  saveCustomizationBtn.addEventListener('click', async () => {
+    if (!chosenEmoji) chosenEmoji = '🙂';
+    if (!chosenColor) chosenColor = '#d97706';
+    modal.classList.add('hidden');
     await savePlayerData();
-    // بعد حفظ اللاعب، أبدأ presence و (إن كنت مضيفاً) تنظيف المضيف
     startPresenceHeartbeat();
-    startHostCleanupIfNeeded();
   });
 }
 
-// ===================== أدوات مساعدة =====================
-function escapeHtml(text) {
-  if (!text) return '';
-  return text.replace(/[&<>"'`=\/]/g, function (s) {
-    return ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-      '/': '&#x2F;',
-      '`': '&#x60;',
-      '=': '&#x3D;'
-    })[s];
+// ================ مراقبة user doc ===================
+function subscribeToUserDoc(uid){
+  if (userDocUnsub) userDocUnsub();
+  userDocUnsub = db.collection('users').doc(uid).onSnapshot(doc => {
+    // whenever users doc changes نحدّث قائمة الحزم
+    if (doc.exists) loadOwnedPacks(uid);
   });
 }
 
-// ===================== انضمام للغرفة =====================
-async function joinRoom() {
-  currentUser = auth.currentUser;
-  if (!currentUser) {
-    window.location.href = "index.html";
-    return;
+// ================ تحميل الحزم المملوكة (بدون تكرار) ======
+async function loadOwnedPacks(uid){
+  if (!packContainer || !packSelect) return;
+  try {
+    const doc = await db.collection('users').doc(uid).get();
+    if (!doc.exists) { packContainer.classList.add('hidden'); return; }
+    // استخدم Set لإزالة التكرار
+    const ownedRaw = doc.data().ownedPacks || [];
+    const owned = Array.from(new Set(ownedRaw || []));
+    if (!owned.length) { packContainer.classList.add('hidden'); return; }
+
+    packContainer.classList.remove('hidden');
+    packSelect.innerHTML = '<option value="default">الأسئلة الافتراضية</option>';
+
+    for (const pid of owned) {
+      try {
+        const pdoc = await db.collection('questionPacks').doc(pid).get();
+        if (pdoc.exists) {
+          const p = pdoc.data();
+          const opt = document.createElement('option');
+          opt.value = pid;
+          opt.textContent = `${p.name} (${(p.questions||[]).length} سؤال)`;
+          packSelect.appendChild(opt);
+        }
+      } catch (e) {
+        console.warn('failed load pack', pid, e);
+      }
+    }
+  } catch (e) {
+    console.warn('loadOwnedPacks error', e);
+    packContainer.classList.add('hidden');
   }
+}
+
+// ================ الانضمام للغرفة =====================
+async function joinRoom(){
+  currentUser = auth.currentUser;
+  if (!currentUser) { window.location.href = 'index.html'; return; }
+
+  subscribeToUserDoc(currentUser.uid);
 
   const snap = await roomRef.get();
   if (!snap.exists) {
@@ -102,274 +152,83 @@ async function joinRoom() {
     window.location.href = 'index.html';
     return;
   }
+  currentRoomData = snap.data() || {};
 
-  const data = snap.data() || {};
-
-  // تعيين creator إن لم يكن موجودًا (transaction لتقليل التعارض)
+  // إذا لا يوجد creator نعيّنه باستخدام set مع merge (أمن أكثر)
   try {
-    await db.runTransaction(async (tx) => {
-      const d = await tx.get(roomRef);
-      if (!d.exists) throw "no-doc";
-      const dd = d.data();
-      if (!dd.creator) tx.update(roomRef, { creator: currentUser.uid });
-    });
+    if (!currentRoomData.creator) {
+      await roomRef.set({ creator: currentUser.uid }, { merge: true });
+    }
   } catch (e) {
-    // تجاهل الأخطاء هنا — قد يكون تم تعيين creator من لاعب آخر
+    console.warn('set creator failed', e);
   }
 
-  // هل اللاعب موجود مسبقًا؟
-  const players = data.players || [];
-  const existing = players.find(p => p.id === currentUser.uid);
-  if (existing) {
-    // خزّن الاختيارات محلياً وابدأ heartbeat
-    chosenEmoji = existing.emoji || "🙂";
-    chosenColor = existing.color || chosenColor;
+  // تأكد وجود users doc
+  const userRef = db.collection('users').doc(currentUser.uid);
+  const userSnap = await userRef.get();
+  if (!userSnap.exists) {
+    await userRef.set({
+      name: currentUser.displayName || 'مستخدم',
+      phone: '',
+      plan: 'free',
+      ownedPacks: []
+    }, { merge: true });
+  }
+
+  // إذا اللاعب غير موجود في players أعرض المودال للحفظ
+  const players = currentRoomData.players || [];
+  const exists = players.find(p => p.id === currentUser.uid);
+  if (!exists) {
+    chosenEmoji = '🙂';
+    chosenColor = '#333';
+    modal.classList.remove('hidden');
+    // الحفظ يحدث عند الضغط على زر حفظ في المودال
+  } else {
+    chosenEmoji = exists.emoji || '🙂';
+    chosenColor = exists.color || chosenColor;
     startPresenceHeartbeat();
-    startHostCleanupIfNeeded();
-    return;
   }
-
-  // جديد → أظهر نافذة الاختيار
-  if (modal) modal.classList.remove("hidden");
 }
 
-// ===================== حفظ بيانات اللاعب =====================
-async function savePlayerData() {
+// ================ حفظ بيانات اللاعب ===================
+async function savePlayerData(){
   if (!currentUser) return;
-  const playerData = {
-    id: currentUser.uid,
-    name: currentUser.displayName || 'مستخدم',
-    avatar: currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png',
-    emoji: chosenEmoji || '🙂',
-    color: chosenColor || '#d97706'
-  };
-
-  // نقرأ ونكتب المصفوفة بالكامل لتجنّب مشاكل arrayRemove/arrayUnion مع الأوبجكتات
-  const snap = await roomRef.get();
-  const data = snap.data() || {};
-  const players = data.players || [];
-  const filtered = players.filter(p => p.id !== currentUser.uid);
-  filtered.push(playerData);
-  await roomRef.update({ players: filtered });
-
-  // أنشئ مستند حضور خاص بهذا اللاعب
-  await roomRef.collection('presence').doc(currentUser.uid).set({
-    uid: currentUser.uid,
-    lastSeen: firebase.firestore.FieldValue.serverTimestamp()
-  });
+  try {
+    const rSnap = await roomRef.get();
+    const data = rSnap.exists ? rSnap.data() : {};
+    const players = data.players || [];
+    const filtered = players.filter(p => p.id !== currentUser.uid);
+    const playerObj = {
+      id: currentUser.uid,
+      name: currentUser.displayName || 'مستخدم',
+      avatar: currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png',
+      emoji: chosenEmoji || '🙂',
+      color: chosenColor || '#d97706'
+    };
+    filtered.push(playerObj);
+    await roomRef.update({ players: filtered });
+    await roomRef.collection('presence').doc(currentUser.uid).set({ uid: currentUser.uid, lastSeen: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
+  } catch (e) {
+    console.error('savePlayerData error', e);
+  }
 }
 
-// ===================== presence (heartbeat & cleanup) =====================
-
-// تحدث تايم ستامب الحضور كل 15 ثانية
-function startPresenceHeartbeat() {
-  stopPresenceHeartbeat(); // نمنع مضاعفات
+// ================ حضور (presence) ====================
+function startPresenceHeartbeat(){
+  stopPresenceHeartbeat();
   if (!currentUser) return;
-  // تحديث فوري أولاً
-  roomRef.collection('presence').doc(currentUser.uid).set({
-    uid: currentUser.uid,
-    lastSeen: firebase.firestore.FieldValue.serverTimestamp()
-  }).catch(()=>{});
-  // ثم تحديث دوري
+  roomRef.collection('presence').doc(currentUser.uid).set({ uid: currentUser.uid, lastSeen: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
   presenceInterval = setInterval(() => {
-    roomRef.collection('presence').doc(currentUser.uid).set({
-      uid: currentUser.uid,
-      lastSeen: firebase.firestore.FieldValue.serverTimestamp()
-    }).catch(()=>{});
+    roomRef.collection('presence').doc(currentUser.uid).set({ uid: currentUser.uid, lastSeen: firebase.firestore.FieldValue.serverTimestamp() }).catch(()=>{});
   }, 15000);
 }
-
-function stopPresenceHeartbeat() {
-  if (presenceInterval) {
-    clearInterval(presenceInterval);
-    presenceInterval = null;
-  }
+function stopPresenceHeartbeat(){
+  if (presenceInterval) clearInterval(presenceInterval);
+  presenceInterval = null;
 }
 
-// إذا كنت المضيف فابدأ مهمة تنظيف اللاعبين غير النشطين كل 30 ثانية
-function startHostCleanupIfNeeded() {
-  stopHostCleanup();
-  if (!currentUser) return;
-  roomRef.get().then(snap => {
-    const data = snap.exists ? snap.data() : {};
-    if (data && data.creator === currentUser.uid) {
-      // فقط المضيف يقوم بالتنظيف الدوري
-      hostCleanupInterval = setInterval(() => {
-        pruneStalePlayers().catch(()=>{});
-      }, 30000);
-    }
-  }).catch(()=>{});
-}
-
-function stopHostCleanup() {
-  if (hostCleanupInterval) {
-    clearInterval(hostCleanupInterval);
-    hostCleanupInterval = null;
-  }
-}
-
-// حذف اللاعبين الذين لم يظهروا presence منذ أكثر من 60 ثانية
-async function pruneStalePlayers() {
-  const thresholdMs = 60 * 1000; // 60s
-  // اجلب كل مستندات presence
-  const presSnap = await roomRef.collection('presence').get();
-  const now = Date.now();
-  const staleUids = [];
-  presSnap.forEach(doc => {
-    const d = doc.data();
-    if (!d || !d.lastSeen) return;
-    const ts = d.lastSeen.toDate().getTime();
-    if ((now - ts) > thresholdMs) staleUids.push(d.uid);
-  });
-
-  if (staleUids.length === 0) return;
-
-  // اقرأ players وازِل اللاعبين المطابقين
-  const roomSnap = await roomRef.get();
-  if (!roomSnap.exists) return;
-  const data = roomSnap.data() || {};
-  const players = data.players || [];
-  const filtered = players.filter(p => !staleUids.includes(p.id));
-
-  if (filtered.length !== players.length) {
-    await roomRef.update({ players: filtered }).catch(e => console.warn('prune update failed', e));
-  }
-
-  // أحذف مستندات presence الخاصة بهم
-  for (const uid of staleUids) {
-    await roomRef.collection('presence').doc(uid).delete().catch(()=>{});
-  }
-}
-
-// ===================== إرسال رسالة =====================
-async function sendMessage() {
-  const message = chatInput.value.trim();
-  if (!message) return;
-
-  const isAnswer = currentRoomData?.currentQuestion &&
-                   currentRoomData?.currentPlayer?.id === currentUser.uid;
-
-  await roomRef.collection("chat").add({
-    senderId: currentUser.uid,
-    senderName: currentUser.displayName || 'مستخدم',
-    senderAvatar: currentUser.photoURL || 'https://i.imgur.com/8Km9tLL.png',
-    senderEmoji: getPlayerEmoji(currentUser.uid),
-    senderColor: getPlayerColor(currentUser.uid),
-    type: isAnswer ? "answer" : "chat",
-    question: isAnswer ? currentRoomData.currentQuestion : null,
-    text: message,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  });
-
-  chatInput.value = "";
-  setTyping(false);
-}
-
-function getPlayerEmoji(uid) {
-  const players = currentRoomData?.players || [];
-  const player = players.find(p => p.id === uid);
-  return player?.emoji || "🙂";
-}
-function getPlayerColor(uid) {
-  const players = currentRoomData?.players || [];
-  const player = players.find(p => p.id === uid);
-  return player?.color || "#333";
-}
-
-// ===================== مؤشر الكتابة =====================
-function setTyping(isTyping) {
-  if (!currentUser) return;
-  roomRef.collection("typing").doc(currentUser.uid).set({
-    name: currentUser.displayName || 'مستخدم',
-    typing: isTyping,
-    timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  }).catch(e => console.warn('typing set failed:', e));
-}
-
-// ===================== بدء/تخطي/إنهاء الجولة =====================
-async function startRound() {
-  const snap = await roomRef.get();
-  const data = snap.data() || {};
-
-  if (data.creator && data.creator !== currentUser.uid) {
-    alert('فقط المضيف يمكنه بدء الجولة.');
-    return;
-  }
-
-  const players = data.players || [];
-  const questions = data.questions || [];
-
-  if (players.length < 2) {
-    alert('يجب أن يكون هناك لاعبين على الأقل!');
-    return;
-  }
-
-  const question = questions.length
-    ? questions[Math.floor(Math.random() * questions.length)]
-    : "سؤال افتراضي";
-
-  let available = players;
-  if (data.currentPlayer && data.currentPlayer.id) {
-    available = players.filter(p => p.id !== data.currentPlayer.id);
-    if (!available.length) available = players;
-  }
-  const randPlayer = available[Math.floor(Math.random() * available.length)];
-
-  await roomRef.update({
-    currentQuestion: question,
-    currentPlayer: randPlayer,
-    status: 'playing',
-    questionStartTime: firebase.firestore.FieldValue.serverTimestamp()
-  });
-}
-
-async function skipQuestion() {
-  await roomRef.update({
-    currentQuestion: null,
-    currentPlayer: null,
-    status: 'waiting'
-  });
-  stopTimer();
-}
-
-async function endRound() {
-  await roomRef.update({
-    status: 'waiting',
-    currentQuestion: null,
-    currentPlayer: null
-  });
-  stopTimer();
-}
-
-// ===================== المؤقت (متزامن للجميع) =====================
-function startTimer(seconds) {
-  clearInterval(timerInterval);
-  let remaining = seconds;
-  timerContainer.classList.remove('hidden');
-  timerElement.textContent = remaining;
-
-  timerInterval = setInterval(() => {
-    remaining--;
-    timerElement.textContent = remaining;
-    if (remaining <= 5) {
-      timerElement.classList.add('text-red-500', 'animate__animated', 'animate__pulse');
-    }
-    if (remaining <= 0) {
-      clearInterval(timerInterval);
-      endRound();
-    }
-  }, 1000);
-}
-
-function stopTimer() {
-  clearInterval(timerInterval);
-  timerContainer.classList.add('hidden');
-  timerElement.classList.remove('text-red-500', 'animate__animated', 'animate__pulse');
-  timerElement.textContent = '60';
-}
-
-// ===================== إزالة اللاعب من players (آمنة) =====================
-async function removeSelfFromPlayers() {
+// ================ إزالة اللاعب عند الخروج ===================
+async function removeSelfFromPlayers(){
   if (!currentUser) return;
   try {
     const snap = await roomRef.get();
@@ -380,163 +239,352 @@ async function removeSelfFromPlayers() {
     if (filtered.length !== players.length) {
       await roomRef.update({ players: filtered });
     }
-    // احذف وثيقة presence و typing للمستخدم
     await roomRef.collection('presence').doc(currentUser.uid).delete().catch(()=>{});
     await roomRef.collection('typing').doc(currentUser.uid).delete().catch(()=>{});
   } catch (e) {
-    console.warn('removeSelfFromPlayers failed:', e);
+    console.warn('removeSelfFromPlayers failed', e);
   }
 }
 
-// ===================== مستمعو Firestore =====================
-roomRef.onSnapshot((doc) => {
-  if (!doc.exists) return;
-  currentRoomData = doc.data() || {};
-  const data = currentRoomData;
+// ================ مؤشر الكتابة ======================
+function setTyping(isTyping){
+  if (!currentUser) return;
+  // خزّن uid و name لتكون المقارنة بالـ uid موثوقة
+  roomRef.collection('typing').doc(currentUser.uid).set({
+    uid: currentUser.uid,
+    name: currentUser.displayName || 'مستخدم',
+    typing: isTyping,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch(e => console.warn('setTyping failed', e));
+}
 
-  // تحديث قائمة اللاعبين
-  const players = data.players || [];
-  const playersList = document.getElementById('players-list');
-  playersList.innerHTML = "";
-  players.forEach(p => {
-    playersList.innerHTML += `
-      <div class="flex items-center space-x-3 bg-white p-3 rounded-lg shadow">
-        <span style="font-size:20px">${escapeHtml(p.emoji || "🙂")}</span>
-        <span class="font-bold" style="color:${p.color || "#333"}">
-          ${escapeHtml(p.name)} ${data.creator === p.id ? "(المضيف)" : ""}
-        </span>
-      </div>`;
-  });
-  document.getElementById('players-count').textContent = players.length;
+// ================ إرسال رسالة =======================
+async function sendMessage(){
+  const text = chatInput.value.trim();
+  if (!text) return;
 
-  // تحديث السؤال واللاعب الحالي
-  document.getElementById('question-text').textContent =
-    data.currentQuestion || "لم يتم اختيار سؤال بعد.";
-  document.getElementById('current-player').textContent =
-    data.currentPlayer?.name || "---";
+  // استخدم الدالة المساعدة لاكتشاف اللاعب المختار (مرنة)
+  const isActiveAnswer = currentRoomData?.currentQuestion && isCurrentPlayerUid(currentUser.uid);
+  const type = isActiveAnswer ? 'answer' : 'chat';
+  const question = type === 'answer' ? currentRoomData.currentQuestion : null;
 
-  // المؤقت المتزامن: استخدم questionStartTime
-  if (data.status === 'playing' && data.questionStartTime) {
-    // قد يكون questionStartTime من نوع Timestamp
-    const startTime = data.questionStartTime.toDate().getTime();
-    const now = Date.now();
-    const elapsed = Math.floor((now - startTime) / 1000);
-    const remaining = 60 - elapsed;
-    if (remaining > 0) startTimer(remaining);
-    else stopTimer();
+  try {
+    await roomRef.collection('chat').add({
+      senderId: currentUser.uid,
+      senderName: currentUser.displayName || 'مستخدم',
+      senderEmoji: getPlayerEmoji(currentUser.uid),
+      senderColor: getPlayerColor(currentUser.uid),
+      type,
+      question,
+      text,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    });
+    chatInput.value = '';
+    setTyping(false);
+  } catch (e) {
+    console.error('sendMessage error', e);
+    alert('حدث خطأ أثناء إرسال الرسالة.');
   }
+}
 
-  if (data.status === 'waiting') {
+function getPlayerEmoji(uid){
+  const players = currentRoomData?.players || [];
+  const p = players.find(x => x.id === uid);
+  return p?.emoji || '🙂';
+}
+function getPlayerColor(uid){
+  const players = currentRoomData?.players || [];
+  const p = players.find(x => x.id === uid);
+  return p?.color || '#333';
+}
+
+// ================ بدء الجولة (تخزين currentPlayer كامل) ============
+async function startRound(){
+  try {
+    const rSnap = await roomRef.get();
+    if (!rSnap.exists) { alert('الغرفة غير موجودة'); return; }
+    const data = rSnap.data() || {};
+
+    if (data.creator && data.creator !== currentUser.uid) {
+      alert('فقط المضيف يمكنه بدء الجولة.');
+      return;
+    }
+
+    const players = data.players || [];
+    if (players.length < 2) { alert('يجب أن يكون هناك لاعبين على الأقل'); return; }
+
+    // اختر لاعب عشوائي، تجنب نفس currentPlayer إن أمكن
+    let available = players;
+    if (data.currentPlayer && (data.currentPlayer.id || typeof data.currentPlayer === 'string')) {
+      const curId = typeof data.currentPlayer === 'string' ? data.currentPlayer : (data.currentPlayer.id || data.currentPlayer.uid);
+      const filtered = players.filter(p => p.id !== curId);
+      if (filtered.length) available = filtered;
+    }
+    const randPlayer = available[Math.floor(Math.random() * available.length)];
+
+    // اختر سؤال من الحزمة إن اختيرت، وإلا من room.questions
+    let question = null;
+    if (packSelect && packSelect.value && packSelect.value !== 'default') {
+      try {
+        const packSnap = await db.collection('questionPacks').doc(packSelect.value).get();
+        if (packSnap.exists) {
+          const pack = packSnap.data();
+          if (pack.questions && pack.questions.length) question = pack.questions[Math.floor(Math.random() * pack.questions.length)];
+        }
+      } catch (e) { console.warn('failed to fetch selected pack', e); }
+    }
+    if (!question) {
+      const roomQs = data.questions || [];
+      question = roomQs.length ? roomQs[Math.floor(Math.random() * roomQs.length)] : 'سؤال افتراضي';
+    }
+
+    const currentPlayerObj = {
+      id: randPlayer.id,
+      name: randPlayer.name || randPlayer.id,
+      emoji: randPlayer.emoji || '🙂',
+      color: randPlayer.color || '#333'
+    };
+
+    console.log('startRound -> chosen player:', currentPlayerObj);
+
+    await roomRef.update({
+      currentQuestion: question,
+      currentPlayer: currentPlayerObj,
+      status: 'playing',
+      questionStartTime: firebase.firestore.FieldValue.serverTimestamp()
+    });
+  } catch (err) {
+    console.error('startRound error', err);
+    alert('حدث خطأ أثناء بدء الجولة.');
+  }
+}
+
+async function skipQuestion(){
+  try {
+    await roomRef.update({ currentQuestion: null, currentPlayer: null, status: 'waiting' });
     stopTimer();
-  }
+  } catch (e) { console.warn('skipQuestion failed', e); }
+}
 
-  // تمكين/تعطيل زر البدء بحسب كونك المضيف
-  if (data.creator && currentUser) {
-    startRoundBtn.disabled = data.creator !== currentUser.uid;
-  }
-});
+async function endRound(){
+  try {
+    await roomRef.update({ status: 'waiting', currentQuestion: null, currentPlayer: null });
+    stopTimer();
+  } catch (e) { console.warn('endRound failed', e); }
+}
 
-// الرسائل
-roomRef.collection("chat").orderBy("timestamp")
-  .onSnapshot((snap) => {
-    const chatBox = document.getElementById('chat-messages');
-    chatBox.innerHTML = "";
+// ================ مؤقت متزامن ===========================
+function startTimer(seconds){
+  clearInterval(timerInterval);
+  let remaining = seconds;
+  if (timerContainer) timerContainer.classList.remove('hidden');
+  if (timerEl) timerEl.textContent = remaining;
+  timerInterval = setInterval(() => {
+    remaining--;
+    if (timerEl) timerEl.textContent = remaining;
+    if (remaining <= 5 && timerEl) timerEl.classList.add('text-red-500');
+    if (remaining <= 0) { clearInterval(timerInterval); endRound(); }
+  }, 1000);
+}
+function stopTimer(){
+  clearInterval(timerInterval);
+  if (timerContainer) timerContainer.classList.add('hidden');
+  if (timerEl) { timerEl.classList.remove('text-red-500'); timerEl.textContent = '60'; }
+}
+
+// ================ مستمعو Firestore ======================
+function attachRoomListeners(){
+  if (roomUnsub) roomUnsub();
+  roomUnsub = roomRef.onSnapshot(doc => {
+    if (!doc.exists) return;
+    currentRoomData = doc.data() || {};
+
+    // عرض اللاعبين والقيمة (المضيف يظهر بجانب اسمه)
+    const players = currentRoomData.players || [];
+    playersListEl.innerHTML = '';
+    players.forEach(p => {
+      const wrapper = document.createElement('div');
+      wrapper.className = 'flex items-center gap-2 p-2 border-b';
+      wrapper.innerHTML = `<span style="font-size:18px">${escapeHtml(p.emoji||'🙂')}</span>
+                           <div class="font-bold" style="color:${escapeHtml(p.color||'#ff8c11ff')}">${escapeHtml(p.name)}</div>`;
+      // إذا كان مضيف أضف علامة (المضيف)
+      if (currentRoomData.creator === p.id) {
+        const hostTag = document.createElement('span');
+        hostTag.className = 'text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded mr-2';
+        hostTag.innerText = 'المضيف';
+        // ضع العلامة على اليمين أمام الاسم
+        wrapper.appendChild(hostTag);
+      }
+      playersListEl.appendChild(wrapper);
+    });
+    if (playersCountEl) playersCountEl.textContent = players.length;
+
+    // سؤال
+    if (questionTextEl) questionTextEl.textContent = currentRoomData.currentQuestion || 'لم يتم اختيار سؤال بعد.';
+
+    // عرض اللاعب الحالي في خانة current-player (مرن مع string أو object)
+    if (currentPlayerEl) {
+      const cp = currentRoomData.currentPlayer;
+      let displayName = '---';
+      let displayEmoji = '';
+      if (cp) {
+        if (typeof cp === 'string') {
+          // ابحث في players للحصول على التفاصيل
+          const found = (currentRoomData.players || []).find(p => p.id === cp);
+          displayName = found?.name || cp;
+          displayEmoji = found?.emoji || displayEmoji;
+        } else if (typeof cp === 'object') {
+          displayName = cp.name || cp.id || 'مستخدم';
+          displayEmoji = cp.emoji || displayEmoji;
+        }
+      }
+      currentPlayerEl.textContent = `${displayEmoji} ${displayName}`;
+    }
+
+    // مزامنة المؤقت
+    if (currentRoomData.status === 'playing' && currentRoomData.questionStartTime) {
+      try {
+        const startTs = currentRoomData.questionStartTime.toDate().getTime();
+        const elapsed = Math.floor((Date.now() - startTs) / 1000);
+        const remaining = 60 - elapsed;
+        if (remaining > 0) startTimer(remaining);
+        else stopTimer();
+      } catch (e) { console.warn('timer parse error', e); }
+    } else if (currentRoomData.status === 'waiting') {
+      stopTimer();
+    }
+
+    // تفعيل زر البدء فقط للمضيف
+    if (currentRoomData.creator && currentUser) startRoundBtn.disabled = currentRoomData.creator !== currentUser.uid;
+
+    // زر التخطي
+    if (currentRoomData.currentQuestion) skipQuestionBtn.classList.remove('hidden'); else skipQuestionBtn.classList.add('hidden');
+  });
+}
+
+function attachChatListener(){
+  if (chatUnsub) chatUnsub();
+  chatUnsub = roomRef.collection('chat').orderBy('timestamp').onSnapshot(snap => {
+    chatBox.innerHTML = '';
     snap.forEach(doc => {
-      const msg = doc.data();
-      const isMe = msg.senderId === currentUser?.uid;
+      const m = doc.data();
+      const isMe = currentUser && m.senderId === currentUser.uid;
 
-      let content = "";
-      if (msg.type === "answer") {
+      let content = '';
+      if (m.type === 'answer') {
         content = `
-          <div class="font-bold text-sm">${escapeHtml(msg.senderEmoji || "🙂")} ${escapeHtml(msg.senderName)}</div>
-          <div class="text-gray-600">❓ ${escapeHtml(msg.question || '')}</div>
-          <div style="color:${msg.senderColor || "#333"}">💬 ${escapeHtml(msg.text)}</div>
+          <div class="font-bold text-sm" style="color:${escapeHtml(m.senderColor||'#333')}">
+            ${escapeHtml(m.senderEmoji||'🙂')} ${escapeHtml(m.senderName)}
+          </div>
+          <div class="text-gray-600 mt-1">❓ ${escapeHtml(m.question||'')}</div>
+          <div class="mt-2">${escapeHtml(m.text)}</div>
         `;
       } else {
         content = `
-          <div class="font-bold text-sm" style="color:${msg.senderColor || "#333"}">
-            ${escapeHtml(msg.senderEmoji || "🙂")} ${escapeHtml(msg.senderName)}
+          <div class="font-bold text-sm" style="color:${escapeHtml(m.senderColor||'#333')}">
+            ${escapeHtml(m.senderEmoji||'🙂')} ${escapeHtml(m.senderName)}
           </div>
-          <p>${escapeHtml(msg.text)}</p>
+          <div class="mt-1">${escapeHtml(m.text)}</div>
         `;
       }
 
-      chatBox.innerHTML += `
-        <div class="flex ${isMe ? 'justify-start' : 'justify-end'}">
-          <div class="${isMe ? 'bg-amber-100' : 'bg-white'} p-3 rounded-lg shadow max-w-xs">
-            ${content}
-          </div>
-        </div>`;
+      const wrapper = document.createElement('div');
+      wrapper.className = `my-1 flex ${isMe ? 'justify-end' : 'justify-start'}`;
+
+      const bubble = document.createElement('div');
+      bubble.className = `p-2 rounded-lg shadow max-w-[70%] break-words ${
+        isMe ? 'bg-amber-100 text-right' : 'bg-white text-left'
+      }`;
+      bubble.innerHTML = content;
+
+      wrapper.appendChild(bubble);
+      chatBox.appendChild(wrapper);
     });
     chatBox.scrollTop = chatBox.scrollHeight;
   });
+}
 
-// مؤشر الكتابة
-roomRef.collection("typing").onSnapshot((snap) => {
-  let typingUsers = [];
-  snap.forEach(doc => {
-    const d = doc.data();
-    if (d.typing && d.name && d.name !== currentUser?.displayName) {
-      typingUsers.push(d.name);
+
+function attachTypingListener(){
+  if (typingUnsub) typingUnsub();
+  typingUnsub = roomRef.collection('typing').onSnapshot(snap => {
+    const typingUsers = [];
+    snap.forEach(doc => {
+      const d = doc.data();
+      // الآن نعتمد uid للمقارنة (أكثر دقة)
+      if (d && d.typing && d.uid && currentUser && d.uid !== currentUser.uid) {
+        typingUsers.push(d.name || 'مستخدم');
+      }
+    });
+    if (typingUsers.length) {
+      typingIndicator.textContent = typingUsers.join(', ') + ' يكتب...';
+      typingIndicator.classList.remove('hidden');
+    } else {
+      typingIndicator.classList.add('hidden');
     }
   });
-  typingIndicator.textContent = typingUsers.length > 0 ? typingUsers.join(", ") + " يكتب..." : "";
-  typingIndicator.classList.toggle("hidden", typingUsers.length === 0);
-});
+}
 
-// ===================== أحداث الواجهة =====================
+// ================ أحداث واجهة ==========================
 sendMessageBtn.addEventListener('click', sendMessage);
 chatInput.addEventListener('input', () => {
   setTyping(true);
   clearTimeout(typingTimeout);
   typingTimeout = setTimeout(() => setTyping(false), 2000);
 });
-chatInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') {
-    e.preventDefault();
-    sendMessage();
-  }
-});
-copyRoomIdBtn.addEventListener('click', () => {
-  navigator.clipboard.writeText(roomId);
-  copyRoomIdBtn.innerHTML = '<i class="fas fa-check"></i>';
-  setTimeout(() => copyRoomIdBtn.innerHTML = '<i class="fas fa-copy"></i>', 2000);
-});
+chatInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); sendMessage(); }});
 startRoundBtn.addEventListener('click', startRound);
 skipQuestionBtn.addEventListener('click', skipQuestion);
 
-// عند الضغط على الخروج — نزيل اللاعب ثم نعيد للمؤشر
-leaveRoomBtn.addEventListener('click', async () => {
-  try {
-    await removeSelfFromPlayers();
-  } catch(_) {}
+// نسخ معرف الغرفة
+const copyBtn = document.getElementById('copy-room-id');
+if (copyBtn) copyBtn.addEventListener('click', () => {
+  navigator.clipboard.writeText(roomId).then(()=> {
+    copyBtn.innerHTML = '<i class="fas fa-check"></i>';
+    setTimeout(()=> copyBtn.innerHTML = '<i class="fas fa-copy"></i>', 1500);
+  }).catch(()=>{});
+});
+
+// زر الخروج
+const leaveBtn = document.getElementById('leave-room-btn');
+if (leaveBtn) leaveBtn.addEventListener('click', async () => {
+  try { await removeSelfFromPlayers(); } catch (e) {}
   stopPresenceHeartbeat();
-  stopHostCleanup();
   window.location.href = 'index.html';
 });
 
-// تنظيف عند غلق التبويب (محاولة جادة لكن لا ضمان)
+// تنظيف عند الإغلاق (best-effort)
 window.addEventListener('beforeunload', () => {
   try {
     if (currentUser) {
-      // محاولة مزج عملية سريعة: احذف presence و players
-      // removeSelfFromPlayers يقوم بقراءة/كتابة لذا لا ننتظر اكتماله لأن المستعرض قد يغلق
-      removeSelfFromPlayers();
+      roomRef.get().then(snap => {
+        if (!snap.exists) return;
+        const players = (snap.data().players || []).filter(p => p.id !== currentUser.uid);
+        roomRef.update({ players }).catch(()=>{});
+      });
+      roomRef.collection('presence').doc(currentUser.uid).delete().catch(()=>{});
+      roomRef.collection('typing').doc(currentUser.uid).delete().catch(()=>{});
     }
   } catch (e) {}
 });
 
-// ===================== المصادقة والبدء =====================
-auth.onAuthStateChanged(async (user) => {
+// ================ auth & تشغيل المستمعين ====================
+auth.onAuthStateChanged(async user => {
   currentUser = user;
-  if (!user) {
-    window.location.href = 'index.html';
-  } else {
-    // إذا colorPicker موجود حدّده محلياً
-    if (typeof colorPicker !== 'undefined' && colorPicker && colorPicker.value) chosenColor = colorPicker.value;
-    await joinRoom();
-    // لو كان المستخدم موجودًا سابقاً فابدأ heartbeat (إذا لم يبدأ في save)
-    startPresenceHeartbeat();
-    startHostCleanupIfNeeded();
-  }
+  if (!user) { window.location.href = 'index.html'; return; }
+
+  subscribeToUserDoc(currentUser.uid);
+  await joinRoom();
+
+  attachRoomListeners();
+  attachChatListener();
+  attachTypingListener();
+  loadOwnedPacks(currentUser.uid);
+
+  // ابدأ presence إذا كان اللاعب مدرجًا في القائمة
+  try {
+    const s = await roomRef.get();
+    const players = s.exists ? (s.data().players || []) : [];
+    if (players.find(p => p.id === currentUser.uid)) startPresenceHeartbeat();
+  } catch (e) { console.warn(e); }
 });
